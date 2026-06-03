@@ -1,0 +1,14 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://developer.hihonor.com/repo' }
+    }
+    dependencies {
+        classpath 'com.hihonor.mcs:asplugin:2.0.1.300'
+    }
+}
+
+plugins {
+    id 'com.android.application' version '8.7.3' apply false
+}

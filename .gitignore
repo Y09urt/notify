@@ -3,6 +3,11 @@ node_modules/
 .env
 .dev.vars
 %USERPROFILE%/
+android-app/.gradle/
+android-app/**/build/
+android-app/app/mcs-services.json
+*.jks
+*.keystore
 
 ### AL ###
 #Template for AL projects for Dynamics 365 Business Central

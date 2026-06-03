@@ -1,6 +1,13 @@
 import { sendHonor } from "./honor";
 import { empty, HttpError, isAdmin, isHttpError, json, readJson } from "./http";
-import type { Env, PushJob, PushRequest, PushTokenRow, RegisterRequest } from "./types";
+import type {
+  Env,
+  PushJob,
+  PushMessageRow,
+  PushRequest,
+  PushTokenRow,
+  RegisterRequest,
+} from "./types";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -11,7 +18,11 @@ export default {
 
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health") {
-        return json({ ok: true, version: "2026-06-03-2" });
+        return json({ ok: true, version: "2026-06-03-3" });
+      }
+
+      if (request.method === "GET" && url.pathname === "/messages") {
+        return listMessages(url, env);
       }
 
       if (request.method === "POST" && url.pathname === "/register") {
@@ -127,8 +138,48 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
     }
   }
 
+  if (userId) {
+    await env.DB.prepare(
+      `INSERT INTO push_messages (id, user_id, title, body, data)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+      .bind(crypto.randomUUID(), userId, title, messageBody, data ? JSON.stringify(data) : null)
+      .run();
+  }
+
   await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
   return json({ ok: true, queued: jobs.length }, 202);
+}
+
+async function listMessages(url: URL, env: Env): Promise<Response> {
+  const userId = optionalString(url.searchParams.get("userId"));
+  if (!userId) {
+    throw new HttpError(400, "userId is required");
+  }
+
+  const rawLimit = Number(url.searchParams.get("limit") ?? "100");
+  const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 200) : 100;
+  const result = await env.DB.prepare(
+    `SELECT id, user_id, title, body, data, created_at
+     FROM push_messages
+     WHERE user_id = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  )
+    .bind(userId, limit)
+    .all<PushMessageRow>();
+
+  return json({
+    ok: true,
+    messages: (result.results ?? []).map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      title: row.title,
+      body: row.body,
+      data: row.data ? safeJson(row.data) : null,
+      createdAt: row.created_at,
+    })),
+  });
 }
 
 function requiredString(value: unknown, fieldName: string): string {
@@ -158,4 +209,12 @@ function normalizeData(value: unknown): Record<string, string> | undefined {
       typeof entry === "string" ? entry : JSON.stringify(entry),
     ]),
   );
+}
+
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }

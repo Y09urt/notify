@@ -1,0 +1,26 @@
+plugins {
+    id 'com.android.application'
+}
+
+apply plugin: 'com.hihonor.mcs.asplugin'
+
+android {
+    namespace 'com.ljq.notify'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.ljq.notify'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+
+        manifestPlaceholders = [
+            HONOR_PUSH_APPID: 'replace-with-your-honor-app-id'
+        ]
+    }
+}
+
+dependencies {
+    implementation 'com.hihonor.mcs:push:7.0.61.303'
+}

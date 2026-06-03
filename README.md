@@ -157,3 +157,24 @@ curl -X POST "https://你的-worker域名/push" \
 手机端拿到荣耀 PushToken 后调用 `/register`。用户退出登录、切换账号或 PushToken 刷新时，需要重新注册。
 
 生产环境不要让 `/register` 完全裸奔，建议接入你的登录态、签名或一次性绑定码，避免别人把无关 token 写进你的 D1。
+
+## Android App
+
+仓库里的 `android-app/` 是一个原生 Android App 工程。它会：
+
+1. 获取荣耀 PushToken 并上传到 `/register`。
+2. 打开 App 时调用 `/messages?userId=u_1001` 拉取历史消息。
+3. 使用 SQLite 缓存已经展示过的消息。
+4. 收到透传消息时写入本地缓存并展示系统通知。
+
+新增历史消息表后，需要重新初始化远程 D1：
+
+```bash
+npm run db:init
+```
+
+然后重新部署 Worker：
+
+```bash
+npm run deploy
+```

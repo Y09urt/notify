@@ -38,3 +38,12 @@ export interface PushTokenRow {
   id: string;
   token: string;
 }
+
+export interface PushMessageRow {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  data: string | null;
+  created_at: string;
+}
