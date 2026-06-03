@@ -1,0 +1,21 @@
+name = "notify-worker"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+
+[vars]
+# Defaults can be overridden with `wrangler secret put` or environment vars.
+HONOR_TOKEN_URL = "https://iam.developer.hihonor.com/auth/token"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "notify-db"
+database_id = "replace-with-your-d1-database-id"
+
+[[queues.producers]]
+binding = "PUSH_QUEUE"
+queue = "notify-push"
+
+[[queues.consumers]]
+queue = "notify-push"
+max_batch_size = 10
+max_batch_timeout = 5
