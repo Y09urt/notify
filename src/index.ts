@@ -1,5 +1,5 @@
 import { sendHonor } from "./honor";
-import { empty, HttpError, json, readJson, requireAdmin } from "./http";
+import { empty, HttpError, isHttpError, json, readJson, requireAdmin } from "./http";
 import type { Env, PushJob, PushRequest, PushTokenRow, RegisterRequest } from "./types";
 
 export default {
@@ -24,7 +24,7 @@ export default {
 
       return json({ error: "not found" }, 404);
     } catch (error) {
-      if (error instanceof HttpError) {
+      if (isHttpError(error)) {
         return json({ error: error.message }, error.status);
       }
 

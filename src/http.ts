@@ -35,7 +35,16 @@ export class HttpError extends Error {
     message: string,
   ) {
     super(message);
+    this.name = "HttpError";
   }
+}
+
+export function isHttpError(error: unknown): error is HttpError {
+  return (
+    error instanceof Error &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+  );
 }
 
 export function requireAdmin(request: Request, adminToken: string): void {
