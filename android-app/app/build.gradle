@@ -4,6 +4,13 @@ plugins {
 
 apply plugin: 'com.hihonor.mcs.asplugin'
 
+Properties localProps = new Properties()
+File localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+String honorPushAppId = localProps.getProperty('HONOR_PUSH_APPID', 'replace-with-your-honor-app-id')
+
 android {
     namespace 'com.ljq.notify'
     compileSdk 35
@@ -16,7 +23,7 @@ android {
         versionName '1.0'
 
         manifestPlaceholders = [
-            HONOR_PUSH_APPID: 'replace-with-your-honor-app-id'
+            HONOR_PUSH_APPID: honorPushAppId
         ]
     }
 

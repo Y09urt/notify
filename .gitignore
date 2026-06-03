@@ -6,6 +6,7 @@ node_modules/
 android-app/.gradle/
 android-app/**/build/
 android-app/app/mcs-services.json
+android-app/local.properties
 *.jks
 *.keystore
 

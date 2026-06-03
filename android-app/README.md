@@ -17,7 +17,12 @@
 1. 用 Android Studio 打开 `android-app/`。
 2. 在荣耀开发者后台创建应用，包名使用 `com.ljq.notify`，配置签名 SHA-256。
 3. 下载 `mcs-services.json`，放到 `android-app/app/mcs-services.json`。
-4. 在 `app/build.gradle` 里把 `HONOR_PUSH_APPID` 改成荣耀后台的 App ID。
+4. 新建 `android-app/local.properties`，写入荣耀后台的 App ID：
+
+```properties
+HONOR_PUSH_APPID=你的荣耀AppID
+```
+
 5. 检查 `AppConfig.java`：
 
 ```java
