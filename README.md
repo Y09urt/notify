@@ -50,6 +50,12 @@ npx wrangler secret put HONOR_CLIENT_SECRET
 
 `HONOR_APP_ID`、`HONOR_CLIENT_ID`、`HONOR_CLIENT_SECRET` 来自荣耀开发者服务平台里的应用信息。
 
+也可以把 `.env` 里的占位值改成真实值后一次性导入：
+
+```bash
+npx wrangler secret bulk .env
+```
+
 如果荣耀官方文档里的接口域名和当前默认值不同，可以额外配置：
 
 ```bash
@@ -64,6 +70,57 @@ https://push-api.cloud.hihonor.com/v1/{appId}/messages:send
 ```
 
 Worker 会自动把 `{appId}` 替换成 `HONOR_APP_ID`。
+
+## 部署到 Cloudflare
+
+第一次部署建议按这个顺序：
+
+```bash
+npx wrangler login
+npx wrangler d1 create notify-db
+```
+
+把 `d1 create` 返回的 `database_id` 填到 `wrangler.toml`：
+
+```toml
+database_id = "你的-d1-database-id"
+```
+
+然后创建 Queue：
+
+```bash
+npm run queue:create
+```
+
+初始化线上 D1 表：
+
+```bash
+npm run db:init
+```
+
+把 `.env` 里的密钥写入 Cloudflare：
+
+```bash
+npx wrangler secret bulk .env
+```
+
+最后部署：
+
+```bash
+npm run deploy
+```
+
+部署成功后，Wrangler 会输出 Worker 访问地址，例如：
+
+```text
+https://notify-worker.你的子域.workers.dev
+```
+
+用这个地址调用 `/health`：
+
+```bash
+curl https://notify-worker.你的子域.workers.dev/health
+```
 
 ## API
 
