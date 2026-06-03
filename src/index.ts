@@ -1,5 +1,5 @@
 import { sendHonor } from "./honor";
-import { empty, HttpError, isHttpError, json, readJson, requireAdmin } from "./http";
+import { empty, HttpError, isAdmin, isHttpError, json, readJson } from "./http";
 import type { Env, PushJob, PushRequest, PushTokenRow, RegisterRequest } from "./types";
 
 export default {
@@ -11,7 +11,7 @@ export default {
 
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health") {
-        return json({ ok: true });
+        return json({ ok: true, version: "2026-06-03-2" });
       }
 
       if (request.method === "POST" && url.pathname === "/register") {
@@ -90,7 +90,9 @@ async function registerDevice(request: Request, env: Env): Promise<Response> {
 }
 
 async function enqueuePush(request: Request, env: Env): Promise<Response> {
-  requireAdmin(request, env.ADMIN_TOKEN);
+  if (!isAdmin(request, env.ADMIN_TOKEN)) {
+    return json({ error: "missing or invalid admin token" }, 401);
+  }
 
   const body = await readJson<PushRequest>(request);
   const title = requiredString(body.title, "title");

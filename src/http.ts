@@ -47,14 +47,12 @@ export function isHttpError(error: unknown): error is HttpError {
   );
 }
 
-export function requireAdmin(request: Request, adminToken: string): void {
+export function isAdmin(request: Request, adminToken: string | undefined): boolean {
   const authorization = request.headers.get("authorization") ?? "";
   const bearer = authorization.startsWith("Bearer ")
     ? authorization.slice("Bearer ".length)
     : "";
   const headerToken = request.headers.get("x-admin-token") ?? "";
 
-  if (!adminToken || (bearer !== adminToken && headerToken !== adminToken)) {
-    throw new HttpError(401, "missing or invalid admin token");
-  }
+  return Boolean(adminToken && (bearer === adminToken || headerToken === adminToken));
 }
