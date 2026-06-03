@@ -19,6 +19,11 @@ android {
             HONOR_PUSH_APPID: 'replace-with-your-honor-app-id'
         ]
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 }
 
 dependencies {

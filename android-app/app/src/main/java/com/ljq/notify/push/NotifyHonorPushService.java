@@ -1,7 +1,7 @@
 package com.ljq.notify.push;
 
 import com.hihonor.push.sdk.HonorMessageService;
-import com.hihonor.push.sdk.bean.HonorPushDataMsg;
+import com.hihonor.push.sdk.HonorPushDataMsg;
 import com.ljq.notify.MessageStore;
 import com.ljq.notify.NotificationHelper;
 import com.ljq.notify.NotifyMessage;

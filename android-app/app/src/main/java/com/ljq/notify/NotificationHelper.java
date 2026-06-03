@@ -29,6 +29,7 @@ public final class NotificationHelper {
         }
     }
 
+    @SuppressWarnings("deprecation")
     public static void show(Context context, NotifyMessage message) {
         Intent intent = new Intent(context, MainActivity.class);
         intent.putExtra("message_id", message.id);
