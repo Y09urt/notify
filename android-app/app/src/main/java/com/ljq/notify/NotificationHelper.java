@@ -42,13 +42,16 @@ public final class NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        android.app.Notification notification = new android.app.Notification.Builder(context)
+        android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new android.app.Notification.Builder(context, CHANNEL_ID)
+                : new android.app.Notification.Builder(context);
+
+        android.app.Notification notification = builder
                 .setContentTitle(message.title)
                 .setContentText(message.body)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
-                .setChannelId(CHANNEL_ID)
                 .build();
 
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);

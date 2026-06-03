@@ -42,6 +42,14 @@ public class MessageStore extends SQLiteOpenHelper {
         getWritableDatabase().insertWithOnConflict("messages", null, values, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
+    public void delete(String id) {
+        getWritableDatabase().delete("messages", "id = ?", new String[]{id});
+    }
+
+    public void clear() {
+        getWritableDatabase().delete("messages", null, null);
+    }
+
     public List<NotifyMessage> latest(int limit) {
         ArrayList<NotifyMessage> messages = new ArrayList<>();
         try (Cursor cursor = getReadableDatabase().query(

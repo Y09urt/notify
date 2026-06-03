@@ -2,11 +2,13 @@ package com.ljq.notify;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -23,6 +25,8 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private MessageStore store;
+    private SettingsStore settings;
+    private WorkerApi api;
     private LinearLayout messageList;
     private TextView statusView;
 
@@ -30,6 +34,8 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = new MessageStore(this);
+        settings = new SettingsStore(this);
+        api = new WorkerApi(settings);
         buildUi();
         requestNotificationPermission();
         saveLaunchMessage();
@@ -51,22 +57,45 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         statusView = new TextView(this);
-        statusView.setText("用户: " + AppConfig.USER_ID);
+        statusView.setText("用户: " + settings.userId());
         statusView.setTextColor(0xFF4B5563);
         root.addView(statusView);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         Button refresh = new Button(this);
-        refresh.setText("刷新消息");
+        refresh.setText("刷新");
         refresh.setOnClickListener(v -> fetchHistory());
         actions.addView(refresh);
 
         Button register = new Button(this);
-        register.setText("注册推送");
+        register.setText("注册");
         register.setOnClickListener(v -> requestPushToken());
         actions.addView(register);
+
+        Button settingsButton = new Button(this);
+        settingsButton.setText("设置");
+        settingsButton.setOnClickListener(v -> showSettingsDialog());
+        actions.addView(settingsButton);
         root.addView(actions);
+
+        LinearLayout secondaryActions = new LinearLayout(this);
+        secondaryActions.setOrientation(LinearLayout.HORIZONTAL);
+        Button uploadToken = new Button(this);
+        uploadToken.setText("重传Token");
+        uploadToken.setOnClickListener(v -> uploadLastToken());
+        secondaryActions.addView(uploadToken);
+
+        Button clear = new Button(this);
+        clear.setText("清空本地");
+        clear.setOnClickListener(v -> confirmClearMessages());
+        secondaryActions.addView(clear);
+
+        Button localTest = new Button(this);
+        localTest.setText("本地测试");
+        localTest.setOnClickListener(v -> addLocalTestMessage());
+        secondaryActions.addView(localTest);
+        root.addView(secondaryActions);
 
         ScrollView scrollView = new ScrollView(this);
         messageList = new LinearLayout(this);
@@ -93,10 +122,11 @@ public class MainActivity extends Activity {
         HonorPushRegistrar.requestToken(this, new HonorPushRegistrar.Callback() {
             @Override
             public void onToken(String token) {
+                settings.setLastToken(token);
                 setStatus("PushToken 已获取，正在上传...");
                 executor.execute(() -> {
                     try {
-                        WorkerApi.registerToken(token);
+                        api.registerToken(token);
                         runOnUiThread(() -> setStatus("PushToken 已注册到 Worker"));
                     } catch (Exception error) {
                         runOnUiThread(() -> setStatus("注册失败: " + error.getMessage()));
@@ -111,11 +141,28 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void uploadLastToken() {
+        String token = settings.lastToken();
+        if (token.isEmpty()) {
+            setStatus("还没有可重传的 PushToken");
+            return;
+        }
+        setStatus("正在重传 PushToken...");
+        executor.execute(() -> {
+            try {
+                api.registerToken(token);
+                runOnUiThread(() -> setStatus("PushToken 已重传"));
+            } catch (Exception error) {
+                runOnUiThread(() -> setStatus("重传失败: " + error.getMessage()));
+            }
+        });
+    }
+
     private void fetchHistory() {
         setStatus("正在拉取历史消息...");
         executor.execute(() -> {
             try {
-                List<NotifyMessage> messages = WorkerApi.fetchMessages();
+                List<NotifyMessage> messages = api.fetchMessages();
                 for (NotifyMessage message : messages) {
                     store.save(message);
                 }
@@ -148,6 +195,7 @@ public class MainActivity extends Activity {
             item.setTextSize(16);
             item.setTextColor(0xFF111827);
             item.setPadding(0, dp(12), 0, dp(12));
+            item.setOnClickListener(v -> showMessageDialog(message));
             messageList.addView(item);
 
             View divider = new View(this);
@@ -157,6 +205,87 @@ public class MainActivity extends Activity {
                     1
             ));
         }
+    }
+
+    private void showMessageDialog(NotifyMessage message) {
+        String text = message.body;
+        if (message.data != null && !"null".equals(message.data)) {
+            text += "\n\nData:\n" + message.data;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(message.title)
+                .setMessage(text)
+                .setPositiveButton("确定", null)
+                .setNegativeButton("删除", (dialog, which) -> {
+                    store.delete(message.id);
+                    refreshLocal();
+                })
+                .show();
+    }
+
+    private void showSettingsDialog() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(16);
+        layout.setPadding(padding, padding, padding, 0);
+
+        EditText workerUrl = new EditText(this);
+        workerUrl.setHint("Worker URL");
+        workerUrl.setSingleLine(true);
+        workerUrl.setText(settings.workerUrl());
+        layout.addView(workerUrl);
+
+        EditText userId = new EditText(this);
+        userId.setHint("User ID");
+        userId.setSingleLine(true);
+        userId.setText(settings.userId());
+        layout.addView(userId);
+
+        TextView token = new TextView(this);
+        String lastToken = settings.lastToken();
+        token.setText(lastToken.isEmpty() ? "暂无 PushToken" : "Token: " + shortToken(lastToken));
+        token.setTextColor(0xFF4B5563);
+        token.setPadding(0, dp(12), 0, 0);
+        layout.addView(token);
+
+        new AlertDialog.Builder(this)
+                .setTitle("设置")
+                .setView(layout)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    settings.setWorkerUrl(workerUrl.getText().toString());
+                    settings.setUserId(userId.getText().toString());
+                    api = new WorkerApi(settings);
+                    setStatus("设置已保存。用户: " + settings.userId());
+                    fetchHistory();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void confirmClearMessages() {
+        new AlertDialog.Builder(this)
+                .setTitle("清空本地消息")
+                .setMessage("只会清空当前手机缓存，不会删除 Cloudflare D1 里的历史记录。")
+                .setPositiveButton("清空", (dialog, which) -> {
+                    store.clear();
+                    refreshLocal();
+                    setStatus("本地消息已清空");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void addLocalTestMessage() {
+        NotifyMessage message = new NotifyMessage(
+                "local-" + System.currentTimeMillis(),
+                "本地测试消息",
+                "这条消息只保存在当前手机，用于在荣耀 Push 开通前测试界面。",
+                "{\"source\":\"local-test\"}",
+                System.currentTimeMillis()
+        );
+        store.save(message);
+        refreshLocal();
+        setStatus("已添加本地测试消息");
     }
 
     private void saveLaunchMessage() {
@@ -180,6 +309,13 @@ public class MainActivity extends Activity {
 
     private void setStatus(String text) {
         runOnUiThread(() -> statusView.setText(text));
+    }
+
+    private String shortToken(String token) {
+        if (token.length() <= 16) {
+            return token;
+        }
+        return token.substring(0, 8) + "..." + token.substring(token.length() - 8);
     }
 
     private int dp(int value) {

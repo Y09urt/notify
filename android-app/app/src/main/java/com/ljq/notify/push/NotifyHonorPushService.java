@@ -5,6 +5,7 @@ import com.hihonor.push.sdk.bean.HonorPushDataMsg;
 import com.ljq.notify.MessageStore;
 import com.ljq.notify.NotificationHelper;
 import com.ljq.notify.NotifyMessage;
+import com.ljq.notify.SettingsStore;
 import com.ljq.notify.WorkerApi;
 
 import org.json.JSONObject;
@@ -17,7 +18,9 @@ public class NotifyHonorPushService extends HonorMessageService {
         }
         new Thread(() -> {
             try {
-                WorkerApi.registerToken(token);
+                SettingsStore settings = new SettingsStore(this);
+                settings.setLastToken(token);
+                new WorkerApi(settings).registerToken(token);
             } catch (Exception ignored) {
             }
         }).start();
