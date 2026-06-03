@@ -9,7 +9,7 @@ HONOR_TOKEN_URL = "https://iam.developer.hihonor.com/auth/token"
 [[d1_databases]]
 binding = "DB"
 database_name = "notify-db"
-database_id = "replace-with-your-d1-database-id"
+database_id = "02fd6e8f-2fc7-4a23-82da-31fd492fc48e"
 
 [[queues.producers]]
 binding = "PUSH_QUEUE"
