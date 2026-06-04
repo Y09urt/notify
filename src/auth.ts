@@ -2,7 +2,7 @@ import { HttpError, json, readJson } from "./http";
 import type { Env } from "./types";
 
 const SESSION_DAYS = 90;
-const PASSWORD_ITERATIONS = 120_000;
+const PASSWORD_ITERATIONS = 20_000;
 
 let authSchemaReady: Promise<void> | undefined;
 

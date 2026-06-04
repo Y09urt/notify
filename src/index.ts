@@ -62,8 +62,9 @@ export default {
         return json({ error: error.message }, error.status);
       }
 
+      const detail = error instanceof Error ? error.message : String(error);
       console.error(error);
-      return json({ error: "internal error" }, 500);
+      return json({ error: "internal error", detail }, 500);
     }
   },
 
