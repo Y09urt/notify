@@ -29,31 +29,31 @@ export default {
       }
 
       if (request.method === "POST" && url.pathname === "/auth/register") {
-        return registerUser(request, env);
+        return await registerUser(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/auth/login") {
-        return loginUser(request, env);
+        return await loginUser(request, env);
       }
 
       if (request.method === "GET" && url.pathname === "/auth/me") {
-        return currentUser(request, env);
+        return await currentUser(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/auth/logout") {
-        return logoutUser(request, env);
+        return await logoutUser(request, env);
       }
 
       if (request.method === "GET" && url.pathname === "/messages") {
-        return listMessages(request, url, env);
+        return await listMessages(request, url, env);
       }
 
       if (request.method === "POST" && url.pathname === "/register") {
-        return registerDevice(request, env);
+        return await registerDevice(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/push") {
-        return enqueuePush(request, env);
+        return await enqueuePush(request, env);
       }
 
       return json({ error: "not found" }, 404);
