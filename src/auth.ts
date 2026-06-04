@@ -103,26 +103,28 @@ function ensureAuthSchema(env: Env): Promise<void> {
 }
 
 async function createAuthSchema(env: Env): Promise<void> {
-  await env.DB.exec(`
-    CREATE TABLE IF NOT EXISTS users (
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
+    )`,
+    `CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       token_hash TEXT NOT NULL UNIQUE,
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
+  ];
 
-    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
-    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-  `);
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
 }
 
 async function readAuthBody(request: Request): Promise<{ id: string; password: string }> {
