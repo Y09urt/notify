@@ -28,6 +28,10 @@ export default {
         return json({ ok: true, version: "2026-06-04-auth-2" });
       }
 
+      if (request.method === "GET" && url.pathname === "/app/version") {
+        return appVersion(env);
+      }
+
       if (request.method === "POST" && url.pathname === "/auth/register") {
         return await registerUser(request, env);
       }
@@ -95,6 +99,17 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env, PushJob>;
+
+function appVersion(env: Env): Response {
+  const versionCode = Number(env.APP_LATEST_VERSION_CODE ?? "1");
+  return json({
+    ok: true,
+    versionCode: Number.isFinite(versionCode) ? versionCode : 1,
+    versionName: env.APP_LATEST_VERSION_NAME ?? "1.0",
+    downloadUrl: env.APP_DOWNLOAD_URL ?? "",
+    releaseNotes: env.APP_RELEASE_NOTES ?? "",
+  });
+}
 
 async function registerDevice(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);

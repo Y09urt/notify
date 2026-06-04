@@ -33,6 +33,20 @@ public final class WorkerApi {
         }
     }
 
+    public static final class UpdateInfo {
+        public final int versionCode;
+        public final String versionName;
+        public final String downloadUrl;
+        public final String releaseNotes;
+
+        public UpdateInfo(int versionCode, String versionName, String downloadUrl, String releaseNotes) {
+            this.versionCode = versionCode;
+            this.versionName = versionName;
+            this.downloadUrl = downloadUrl;
+            this.releaseNotes = releaseNotes;
+        }
+    }
+
     public WorkerApi(SettingsStore settings) {
         workerBaseUrl = settings.workerUrl();
         userId = settings.userId();
@@ -55,6 +69,17 @@ public final class WorkerApi {
 
     public void logout() throws Exception {
         request("POST", "/auth/logout", "{}");
+    }
+
+    public UpdateInfo fetchUpdateInfo() throws Exception {
+        String response = request("GET", "/app/version", null);
+        JSONObject payload = new JSONObject(response);
+        return new UpdateInfo(
+                payload.optInt("versionCode", 1),
+                payload.optString("versionName", "1.0"),
+                payload.optString("downloadUrl"),
+                payload.optString("releaseNotes")
+        );
     }
 
     public void registerToken(String token) throws Exception {

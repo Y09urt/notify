@@ -72,6 +72,17 @@ https://push-api.cloud.hihonor.com/v1/{appId}/messages:send
 
 Worker 会自动把 `{appId}` 替换成 `HONOR_APP_ID`。
 
+远程更新检查使用这些 Worker 变量：
+
+```bash
+npx wrangler secret put APP_LATEST_VERSION_CODE
+npx wrangler secret put APP_LATEST_VERSION_NAME
+npx wrangler secret put APP_DOWNLOAD_URL
+npx wrangler secret put APP_RELEASE_NOTES
+```
+
+其中 `APP_DOWNLOAD_URL` 可以填 GitHub Release、Cloudflare R2 或其他 HTTPS APK 下载地址。
+
 ## 部署到 Cloudflare
 
 第一次部署建议按这个顺序：

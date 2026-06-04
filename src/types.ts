@@ -7,6 +7,10 @@ export interface Env {
   HONOR_CLIENT_SECRET: string;
   HONOR_TOKEN_URL?: string;
   HONOR_SEND_URL?: string;
+  APP_LATEST_VERSION_CODE?: string;
+  APP_LATEST_VERSION_NAME?: string;
+  APP_DOWNLOAD_URL?: string;
+  APP_RELEASE_NOTES?: string;
 }
 
 export interface PushJob {

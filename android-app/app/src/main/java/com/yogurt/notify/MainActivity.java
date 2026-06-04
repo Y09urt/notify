@@ -3,11 +3,14 @@ package com.yogurt.notify;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.net.Uri;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -523,6 +526,7 @@ public class MainActivity extends Activity {
         drawerPanel.addView(drawerItem("获取 PushToken", COLOR_SUCCESS, this::requestPushToken));
         drawerPanel.addView(drawerItem("重传 PushToken", COLOR_TEXT, this::uploadLastToken));
         drawerPanel.addView(drawerItem("设置服务器", COLOR_PRIMARY, this::showSettingsDialog));
+        drawerPanel.addView(drawerItem("检查更新", COLOR_PRIMARY, this::checkForUpdates));
         drawerPanel.addView(drawerItem("添加本地测试消息", COLOR_WARNING, this::addLocalTestMessage));
         drawerPanel.addView(drawerItem("清空本地消息", COLOR_DANGER, this::confirmClearMessages));
         drawerPanel.addView(drawerItem("退出登录", COLOR_DANGER, this::logout));
@@ -629,6 +633,59 @@ public class MainActivity extends Activity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    private void checkForUpdates() {
+        setStatus("正在检查更新...");
+        executor.execute(() -> {
+            try {
+                WorkerApi.UpdateInfo update = api.fetchUpdateInfo();
+                int currentVersionCode = currentVersionCode();
+                runOnUiThread(() -> showUpdateResult(update, currentVersionCode));
+            } catch (Exception error) {
+                Log.e(TAG, "Check update failed", error);
+                runOnUiThread(() -> setStatus("检查更新失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showUpdateResult(WorkerApi.UpdateInfo update, int currentVersionCode) {
+        if (update.versionCode <= currentVersionCode) {
+            setStatus("已是最新版本");
+            new AlertDialog.Builder(this)
+                    .setTitle("已是最新版本")
+                    .setMessage("当前版本已经是最新。")
+                    .setPositiveButton("确定", null)
+                    .show();
+            return;
+        }
+
+        String notes = update.releaseNotes == null || update.releaseNotes.isEmpty()
+                ? "发现新版本。"
+                : update.releaseNotes;
+        new AlertDialog.Builder(this)
+                .setTitle("发现新版本 " + update.versionName)
+                .setMessage(notes)
+                .setPositiveButton("下载", (dialog, which) -> openDownloadUrl(update.downloadUrl))
+                .setNegativeButton("稍后", null)
+                .show();
+        setStatus("发现新版本: " + update.versionName);
+    }
+
+    private void openDownloadUrl(String downloadUrl) {
+        if (downloadUrl == null || downloadUrl.trim().isEmpty()) {
+            setStatus("更新包下载地址未配置");
+            return;
+        }
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl.trim())));
+    }
+
+    private int currentVersionCode() throws Exception {
+        PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+        if (Build.VERSION.SDK_INT >= 28) {
+            return (int) info.getLongVersionCode();
+        }
+        return info.versionCode;
     }
 
     private void confirmClearMessages() {
