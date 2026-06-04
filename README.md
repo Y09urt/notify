@@ -101,9 +101,16 @@ npx wrangler secret put APP_RELEASE_LATEST_VERSION_CODE
 npx wrangler secret put APP_RELEASE_LATEST_VERSION_NAME
 npx wrangler secret put APP_RELEASE_DOWNLOAD_URL
 npx wrangler secret put APP_RELEASE_NOTES
+npx wrangler secret put APP_RELEASE_APPROVED
 ```
 
 其中下载地址可以填 GitHub Release、Cloudflare R2 或其他 HTTPS APK 下载地址。
+
+`APP_RELEASE_APPROVED` 是正式版发布批准开关。默认值是 `false`，即使已经配置了正式版版本号和下载地址，Worker 也不会向客户端返回正式版更新。只有 Yogurt 确认可以发布时，才把它改成 `true`：
+
+```text
+APP_RELEASE_APPROVED=true
+```
 
 这些敏感变量不能放进 GitHub，仍然需要在 Cloudflare 后台或 Wrangler Secrets 里手动配置：
 
