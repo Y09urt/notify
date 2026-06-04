@@ -29,7 +29,7 @@ export default {
       }
 
       if (request.method === "GET" && url.pathname === "/app/version") {
-        return appVersion(url, env);
+        return await appVersion(request, url, env);
       }
 
       if (request.method === "POST" && url.pathname === "/auth/register") {
@@ -100,9 +100,15 @@ export default {
   },
 } satisfies ExportedHandler<Env, PushJob>;
 
-function appVersion(url: URL, env: Env): Response {
+async function appVersion(request: Request, url: URL, env: Env): Promise<Response> {
   const rawChannel = url.searchParams.get("channel") ?? "release";
   const channel = rawChannel === "debug" ? "debug" : "release";
+  if (channel === "debug") {
+    const auth = await authenticate(request, env);
+    if (!isDebugUpdateAllowed(auth.userId, env.APP_DEBUG_ALLOWED_IDS)) {
+      throw new HttpError(403, "debug updates are not available for this account");
+    }
+  }
   const versionCode = Number(versionValue(env, channel, "VERSION_CODE") ?? "1");
   return json({
     ok: true,
@@ -112,6 +118,14 @@ function appVersion(url: URL, env: Env): Response {
     downloadUrl: versionValue(env, channel, "DOWNLOAD_URL") ?? "",
     releaseNotes: versionValue(env, channel, "RELEASE_NOTES") ?? "",
   });
+}
+
+function isDebugUpdateAllowed(userId: string, allowedIds: string | undefined): boolean {
+  return (allowedIds ?? "")
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(userId.toLowerCase());
 }
 
 function versionValue(env: Env, channel: "debug" | "release", field: string): string | undefined {

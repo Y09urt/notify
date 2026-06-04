@@ -83,7 +83,16 @@ npx wrangler secret put APP_DEBUG_LATEST_VERSION_CODE
 npx wrangler secret put APP_DEBUG_LATEST_VERSION_NAME
 npx wrangler secret put APP_DEBUG_DOWNLOAD_URL
 npx wrangler secret put APP_DEBUG_RELEASE_NOTES
+npx wrangler secret put APP_DEBUG_ALLOWED_IDS
 ```
+
+`APP_DEBUG_ALLOWED_IDS` 是允许获取 Debug 更新的账号白名单，多个账号用英文逗号分隔，例如：
+
+```text
+yogurt,tester1,tester2
+```
+
+如果不配置或为空，Debug 更新接口会拒绝返回下载地址。
 
 正式版使用这些 Worker 变量：
 
