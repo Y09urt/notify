@@ -4,6 +4,8 @@ import type { Env } from "./types";
 const SESSION_DAYS = 90;
 const PASSWORD_ITERATIONS = 120_000;
 
+let authSchemaReady: Promise<void> | undefined;
+
 interface AuthBody {
   id?: unknown;
   password?: unknown;
@@ -27,6 +29,7 @@ export interface AuthUser {
 }
 
 export async function registerUser(request: Request, env: Env): Promise<Response> {
+  await ensureAuthSchema(env);
   const { id, password } = await readAuthBody(request);
   const existing = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(id).first();
   if (existing) {
@@ -44,6 +47,7 @@ export async function registerUser(request: Request, env: Env): Promise<Response
 }
 
 export async function loginUser(request: Request, env: Env): Promise<Response> {
+  await ensureAuthSchema(env);
   const { id, password } = await readAuthBody(request);
   const user = await env.DB.prepare("SELECT id, password_hash, salt FROM users WHERE id = ?")
     .bind(id)
@@ -68,6 +72,7 @@ export async function logoutUser(request: Request, env: Env): Promise<Response> 
 }
 
 export async function authenticate(request: Request, env: Env): Promise<AuthUser> {
+  await ensureAuthSchema(env);
   const token = bearerToken(request);
   if (!token) {
     throw new HttpError(401, "login required");
@@ -90,6 +95,36 @@ export async function authenticate(request: Request, env: Env): Promise<AuthUser
   }
 
   return { sessionId: session.id, userId: session.user_id };
+}
+
+function ensureAuthSchema(env: Env): Promise<void> {
+  authSchemaReady ??= createAuthSchema(env);
+  return authSchemaReady;
+}
+
+async function createAuthSchema(env: Env): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )`,
+    ),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )`,
+    ),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)"),
+  ]);
 }
 
 async function readAuthBody(request: Request): Promise<{ id: string; password: string }> {
