@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = 'NotifyApp'
+rootProject.name = 'YogurtApp'
 include ':app'

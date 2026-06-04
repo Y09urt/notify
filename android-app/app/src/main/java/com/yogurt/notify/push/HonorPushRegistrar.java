@@ -1,4 +1,4 @@
-package com.ljq.notify.push;
+package com.yogurt.notify.push;
 
 import android.content.Context;
 
@@ -39,3 +39,4 @@ public final class HonorPushRegistrar {
         }
     }
 }
+

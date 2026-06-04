@@ -1,3 +1,10 @@
+import {
+  authenticate,
+  currentUser,
+  loginUser,
+  logoutUser,
+  registerUser,
+} from "./auth";
 import { sendHonor } from "./honor";
 import { empty, HttpError, isAdmin, isHttpError, json, readJson } from "./http";
 import type {
@@ -21,8 +28,24 @@ export default {
         return json({ ok: true, version: "2026-06-03-3" });
       }
 
+      if (request.method === "POST" && url.pathname === "/auth/register") {
+        return registerUser(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/auth/login") {
+        return loginUser(request, env);
+      }
+
+      if (request.method === "GET" && url.pathname === "/auth/me") {
+        return currentUser(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/auth/logout") {
+        return logoutUser(request, env);
+      }
+
       if (request.method === "GET" && url.pathname === "/messages") {
-        return listMessages(url, env);
+        return listMessages(request, url, env);
       }
 
       if (request.method === "POST" && url.pathname === "/register") {
@@ -73,10 +96,10 @@ export default {
 } satisfies ExportedHandler<Env, PushJob>;
 
 async function registerDevice(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
   const body = await readJson<RegisterRequest>(request);
   const token = requiredString(body.token, "token");
   const platform = optionalString(body.platform) ?? "honor";
-  const userId = optionalString(body.userId);
   const deviceId = optionalString(body.deviceId);
 
   if (platform !== "honor") {
@@ -94,7 +117,7 @@ async function registerDevice(request: Request, env: Env): Promise<Response> {
        last_error = NULL,
        updated_at = datetime('now')`,
   )
-    .bind(id, userId ?? null, platform, token, deviceId ?? null)
+    .bind(id, auth.userId, platform, token, deviceId ?? null)
     .run();
 
   return json({ ok: true });
@@ -151,12 +174,8 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   return json({ ok: true, queued: jobs.length }, 202);
 }
 
-async function listMessages(url: URL, env: Env): Promise<Response> {
-  const userId = optionalString(url.searchParams.get("userId"));
-  if (!userId) {
-    throw new HttpError(400, "userId is required");
-  }
-
+async function listMessages(request: Request, url: URL, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
   const rawLimit = Number(url.searchParams.get("limit") ?? "100");
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.floor(rawLimit), 1), 200) : 100;
   const result = await env.DB.prepare(
@@ -166,7 +185,7 @@ async function listMessages(url: URL, env: Env): Promise<Response> {
      ORDER BY created_at DESC
      LIMIT ?`,
   )
-    .bind(userId, limit)
+    .bind(auth.userId, limit)
     .all<PushMessageRow>();
 
   return json({

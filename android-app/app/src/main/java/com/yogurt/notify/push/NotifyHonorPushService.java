@@ -1,18 +1,23 @@
-package com.ljq.notify.push;
+package com.yogurt.notify.push;
+
+import android.util.Log;
 
 import com.hihonor.push.sdk.HonorMessageService;
 import com.hihonor.push.sdk.HonorPushDataMsg;
-import com.ljq.notify.MessageStore;
-import com.ljq.notify.NotificationHelper;
-import com.ljq.notify.NotifyMessage;
-import com.ljq.notify.SettingsStore;
-import com.ljq.notify.WorkerApi;
+import com.yogurt.notify.MessageStore;
+import com.yogurt.notify.NotificationHelper;
+import com.yogurt.notify.NotifyMessage;
+import com.yogurt.notify.SettingsStore;
+import com.yogurt.notify.WorkerApi;
 
 import org.json.JSONObject;
 
 public class NotifyHonorPushService extends HonorMessageService {
+    private static final String TAG = "YogurtApp";
+
     @Override
     public void onNewToken(String token) {
+        Log.i(TAG, "service onNewToken tokenEmpty=" + (token == null || token.trim().isEmpty()));
         if (token == null || token.trim().isEmpty()) {
             return;
         }
@@ -21,13 +26,16 @@ public class NotifyHonorPushService extends HonorMessageService {
                 SettingsStore settings = new SettingsStore(this);
                 settings.setLastToken(token);
                 new WorkerApi(settings).registerToken(token);
+                Log.i(TAG, "service token uploaded");
             } catch (Exception ignored) {
+                Log.e(TAG, "service token upload failed", ignored);
             }
         }).start();
     }
 
     @Override
     public void onMessageReceived(HonorPushDataMsg message) {
+        Log.i(TAG, "service onMessageReceived");
         String raw = message == null ? null : message.getData();
         NotifyMessage notifyMessage = parseMessage(raw);
         new MessageStore(this).save(notifyMessage);
@@ -48,3 +56,4 @@ public class NotifyHonorPushService extends HonorMessageService {
         return new NotifyMessage(id, title, body, raw, System.currentTimeMillis());
     }
 }
+

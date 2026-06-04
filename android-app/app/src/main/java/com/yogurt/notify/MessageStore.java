@@ -1,4 +1,4 @@
-package com.ljq.notify;
+package com.yogurt.notify;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -73,3 +73,4 @@ public class MessageStore extends SQLiteOpenHelper {
         return messages;
     }
 }
+

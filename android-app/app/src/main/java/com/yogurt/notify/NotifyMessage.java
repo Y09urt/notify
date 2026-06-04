@@ -1,4 +1,4 @@
-package com.ljq.notify;
+package com.yogurt.notify;
 
 public class NotifyMessage {
     public final String id;
@@ -15,3 +15,4 @@ public class NotifyMessage {
         this.createdAt = createdAt;
     }
 }
+

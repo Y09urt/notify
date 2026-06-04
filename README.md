@@ -6,10 +6,11 @@
 
 1. 荣耀手机 App 集成 Honor Push Kit。
 2. App 获取荣耀 PushToken。
-3. App 调用 Worker 的 `POST /register`，把 PushToken 注册到 D1。
-4. 管理端或业务系统调用 Worker 的 `POST /push`。
-5. Worker 写入 Cloudflare Queue。
-6. Queue consumer 调用荣耀 Push 服务端接口，下发通知到手机。
+3. App 首次打开后注册/登录，拿到长期 session 凭证。
+4. App 调用 Worker 的 `POST /register`，带 session 把 PushToken 注册到 D1。
+5. 管理端或业务系统调用 Worker 的 `POST /push`。
+6. Worker 写入 Cloudflare Queue。
+7. Queue consumer 调用荣耀 Push 服务端接口，下发通知到手机。
 
 ## 初始化
 
@@ -124,12 +125,29 @@ curl https://notify-worker.你的子域.workers.dev/health
 
 ## API
 
+注册账号：
+
+```bash
+curl -X POST "https://你的-worker域名/auth/register" \
+  -H "content-type: application/json" \
+  -d '{"id":"yogurt","password":"至少6位密码"}'
+```
+
+登录：
+
+```bash
+curl -X POST "https://你的-worker域名/auth/login" \
+  -H "content-type: application/json" \
+  -d '{"id":"yogurt","password":"至少6位密码"}'
+```
+
 注册荣耀 PushToken：
 
 ```bash
 curl -X POST "https://你的-worker域名/register" \
   -H "content-type: application/json" \
-  -d '{"userId":"u_1001","platform":"honor","token":"HONOR_PUSH_TOKEN"}'
+  -H "authorization: Bearer 你的SESSION_TOKEN" \
+  -d '{"platform":"honor","token":"HONOR_PUSH_TOKEN"}'
 ```
 
 给用户推送：
@@ -138,7 +156,7 @@ curl -X POST "https://你的-worker域名/register" \
 curl -X POST "https://你的-worker域名/push" \
   -H "content-type: application/json" \
   -H "authorization: Bearer 你的ADMIN_TOKEN" \
-  -d '{"userId":"u_1001","title":"新消息","body":"你有一条新通知","data":{"url":"/messages/1"}}'
+  -d '{"userId":"yogurt","title":"新消息","body":"你有一条新通知","data":{"url":"/messages/1"}}'
 ```
 
 直接给某个 PushToken 推送：
@@ -154,18 +172,19 @@ curl -X POST "https://你的-worker域名/push" \
 
 在荣耀开发者服务平台创建 Android 应用，开通 Push Kit，配置包名和签名证书指纹，然后下载 `mcs-services.json` 放到 Android 项目的 `app/` 目录。
 
-手机端拿到荣耀 PushToken 后调用 `/register`。用户退出登录、切换账号或 PushToken 刷新时，需要重新注册。
+手机端注册/登录成功后拿到 sessionToken，再获取荣耀 PushToken 并调用 `/register`。用户退出登录、切换账号或 PushToken 刷新时，需要重新注册 PushToken。
 
-生产环境不要让 `/register` 完全裸奔，建议接入你的登录态、签名或一次性绑定码，避免别人把无关 token 写进你的 D1。
+`/register` 和 `/messages` 已经要求 session 登录态，避免别人把无关 token 写进你的 D1。
 
 ## Android App
 
 仓库里的 `android-app/` 是一个原生 Android App 工程。它会：
 
-1. 获取荣耀 PushToken 并上传到 `/register`。
-2. 打开 App 时调用 `/messages?userId=u_1001` 拉取历史消息。
-3. 使用 SQLite 缓存已经展示过的消息。
-4. 收到透传消息时写入本地缓存并展示系统通知。
+1. 首次打开强制注册/登录，并保存 sessionToken。
+2. 获取荣耀 PushToken 并带 session 上传到 `/register`。
+3. 打开 App 时调用 `/messages` 拉取当前账号的历史消息。
+4. 使用 SQLite 缓存已经展示过的消息。
+5. 收到透传消息时写入本地缓存并展示系统通知。
 
 新增历史消息表后，需要重新初始化远程 D1：
 

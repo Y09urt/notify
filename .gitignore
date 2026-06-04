@@ -4,9 +4,13 @@ node_modules/
 .dev.vars
 %USERPROFILE%/
 android-app/.gradle/
+android-app/app/.gradle/
 android-app/**/build/
 android-app/app/mcs-services.json
 android-app/local.properties
+android-app/app/local.properties
+android-app/app/.idea/
+src/.idea/
 *.jks
 *.keystore
 

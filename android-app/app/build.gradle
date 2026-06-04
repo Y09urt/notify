@@ -12,11 +12,11 @@ if (localPropsFile.exists()) {
 String honorPushAppId = localProps.getProperty('HONOR_PUSH_APPID', 'replace-with-your-honor-app-id')
 
 android {
-    namespace 'com.ljq.notify'
+    namespace 'com.yogurt.notify'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.ljq.notify'
+        applicationId 'com.yogurt.notify'
         minSdk 23
         targetSdk 35
         versionCode 1

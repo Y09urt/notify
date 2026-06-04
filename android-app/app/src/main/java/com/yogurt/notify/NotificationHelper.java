@@ -1,4 +1,4 @@
-package com.ljq.notify;
+package com.yogurt.notify;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -61,3 +61,4 @@ public final class NotificationHelper {
         }
     }
 }
+
