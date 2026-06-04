@@ -109,22 +109,10 @@ async function appVersion(request: Request, url: URL, env: Env): Promise<Respons
       throw new HttpError(403, "debug updates are not available for this account");
     }
   }
-  if (channel === "release" && !isEnabled(env.APP_RELEASE_APPROVED)) {
-    return json({
-      ok: true,
-      channel,
-      approved: false,
-      versionCode: 1,
-      versionName: "1.0",
-      downloadUrl: "",
-      releaseNotes: "Release updates are waiting for Yogurt approval.",
-    });
-  }
   const versionCode = Number(versionValue(env, channel, "VERSION_CODE") ?? "1");
   return json({
     ok: true,
     channel,
-    approved: true,
     versionCode: Number.isFinite(versionCode) ? versionCode : 1,
     versionName: versionValue(env, channel, "VERSION_NAME") ?? "1.0",
     downloadUrl: versionValue(env, channel, "DOWNLOAD_URL") ?? "",
@@ -138,10 +126,6 @@ function isDebugUpdateAllowed(userId: string, allowedIds: string | undefined): b
     .map((id) => id.trim().toLowerCase())
     .filter(Boolean)
     .includes(userId.toLowerCase());
-}
-
-function isEnabled(value: string | undefined): boolean {
-  return ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
 
 function versionValue(env: Env, channel: "debug" | "release", field: string): string | undefined {
