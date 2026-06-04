@@ -3,8 +3,16 @@ main = "src/index.ts"
 compatibility_date = "2025-04-01"
 
 [vars]
-# Defaults can be overridden with `wrangler secret put` or environment vars.
+# Non-sensitive defaults are deployed automatically when Cloudflare builds from GitHub.
 HONOR_TOKEN_URL = "https://iam.developer.hihonor.com/auth/token"
+APP_DEBUG_LATEST_VERSION_CODE = "1"
+APP_DEBUG_LATEST_VERSION_NAME = "1.0-debug"
+APP_DEBUG_DOWNLOAD_URL = ""
+APP_DEBUG_RELEASE_NOTES = "Debug build"
+APP_RELEASE_LATEST_VERSION_CODE = "1"
+APP_RELEASE_LATEST_VERSION_NAME = "1.0"
+APP_RELEASE_DOWNLOAD_URL = ""
+APP_RELEASE_NOTES = "Stable build"
 
 [[d1_databases]]
 binding = "DB"

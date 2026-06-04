@@ -74,6 +74,8 @@ Worker 会自动把 `{appId}` 替换成 `HONOR_APP_ID`。
 
 远程更新检查区分 Debug 版和正式版。Debug APK 会请求 `channel=debug`，正式 APK 会请求 `channel=release`。
 
+这些远程更新变量已经写在 `wrangler.toml` 的 `[vars]` 里，Cloudflare 从 GitHub clone 部署后会自动配置默认值。以后只需要改 `wrangler.toml` 并 push，就能更新非敏感配置。
+
 Debug 版使用这些 Worker 变量：
 
 ```bash
@@ -93,6 +95,16 @@ npx wrangler secret put APP_RELEASE_NOTES
 ```
 
 其中下载地址可以填 GitHub Release、Cloudflare R2 或其他 HTTPS APK 下载地址。
+
+这些敏感变量不能放进 GitHub，仍然需要在 Cloudflare 后台或 Wrangler Secrets 里手动配置：
+
+```bash
+npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put HONOR_APP_ID
+npx wrangler secret put HONOR_CLIENT_ID
+npx wrangler secret put HONOR_CLIENT_SECRET
+npx wrangler secret put HONOR_SEND_URL
+```
 
 ## 部署到 Cloudflare
 
