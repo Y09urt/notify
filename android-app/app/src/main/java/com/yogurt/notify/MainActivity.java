@@ -664,10 +664,11 @@ public class MainActivity extends Activity {
         String notes = update.releaseNotes == null || update.releaseNotes.isEmpty()
                 ? "发现新版本。"
                 : update.releaseNotes;
+        String message = notes + "\n\nNotify 不会自动安装更新，只有你同意后才会打开下载链接。";
         new AlertDialog.Builder(this)
                 .setTitle("发现" + channelLabel(update.channel) + "新版本 " + update.versionName)
-                .setMessage(notes)
-                .setPositiveButton("下载", (dialog, which) -> openDownloadUrl(update.downloadUrl))
+                .setMessage(message)
+                .setPositiveButton("同意并下载", (dialog, which) -> openDownloadUrl(update.downloadUrl))
                 .setNegativeButton("稍后", null)
                 .show();
         setStatus("发现新版本: " + update.versionName);
