@@ -11,6 +11,13 @@ export interface Env {
   APP_LATEST_VERSION_NAME?: string;
   APP_DOWNLOAD_URL?: string;
   APP_RELEASE_NOTES?: string;
+  APP_DEBUG_LATEST_VERSION_CODE?: string;
+  APP_DEBUG_LATEST_VERSION_NAME?: string;
+  APP_DEBUG_DOWNLOAD_URL?: string;
+  APP_DEBUG_RELEASE_NOTES?: string;
+  APP_RELEASE_LATEST_VERSION_CODE?: string;
+  APP_RELEASE_LATEST_VERSION_NAME?: string;
+  APP_RELEASE_DOWNLOAD_URL?: string;
 }
 
 export interface PushJob {

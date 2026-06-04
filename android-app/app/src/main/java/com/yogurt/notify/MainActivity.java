@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
@@ -639,7 +640,7 @@ public class MainActivity extends Activity {
         setStatus("正在检查更新...");
         executor.execute(() -> {
             try {
-                WorkerApi.UpdateInfo update = api.fetchUpdateInfo();
+                WorkerApi.UpdateInfo update = api.fetchUpdateInfo(updateChannel());
                 int currentVersionCode = currentVersionCode();
                 runOnUiThread(() -> showUpdateResult(update, currentVersionCode));
             } catch (Exception error) {
@@ -654,7 +655,7 @@ public class MainActivity extends Activity {
             setStatus("已是最新版本");
             new AlertDialog.Builder(this)
                     .setTitle("已是最新版本")
-                    .setMessage("当前版本已经是最新。")
+                    .setMessage("当前 " + channelLabel(update.channel) + " 已经是最新。")
                     .setPositiveButton("确定", null)
                     .show();
             return;
@@ -664,7 +665,7 @@ public class MainActivity extends Activity {
                 ? "发现新版本。"
                 : update.releaseNotes;
         new AlertDialog.Builder(this)
-                .setTitle("发现新版本 " + update.versionName)
+                .setTitle("发现" + channelLabel(update.channel) + "新版本 " + update.versionName)
                 .setMessage(notes)
                 .setPositiveButton("下载", (dialog, which) -> openDownloadUrl(update.downloadUrl))
                 .setNegativeButton("稍后", null)
@@ -686,6 +687,14 @@ public class MainActivity extends Activity {
             return (int) info.getLongVersionCode();
         }
         return info.versionCode;
+    }
+
+    private String updateChannel() {
+        return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0 ? "debug" : "release";
+    }
+
+    private String channelLabel(String channel) {
+        return "debug".equals(channel) ? "Debug 版" : "正式版";
     }
 
     private void confirmClearMessages() {

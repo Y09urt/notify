@@ -38,12 +38,14 @@ public final class WorkerApi {
         public final String versionName;
         public final String downloadUrl;
         public final String releaseNotes;
+        public final String channel;
 
-        public UpdateInfo(int versionCode, String versionName, String downloadUrl, String releaseNotes) {
+        public UpdateInfo(int versionCode, String versionName, String downloadUrl, String releaseNotes, String channel) {
             this.versionCode = versionCode;
             this.versionName = versionName;
             this.downloadUrl = downloadUrl;
             this.releaseNotes = releaseNotes;
+            this.channel = channel;
         }
     }
 
@@ -71,14 +73,15 @@ public final class WorkerApi {
         request("POST", "/auth/logout", "{}");
     }
 
-    public UpdateInfo fetchUpdateInfo() throws Exception {
-        String response = request("GET", "/app/version", null);
+    public UpdateInfo fetchUpdateInfo(String channel) throws Exception {
+        String response = request("GET", "/app/version?channel=" + channel, null);
         JSONObject payload = new JSONObject(response);
         return new UpdateInfo(
                 payload.optInt("versionCode", 1),
                 payload.optString("versionName", "1.0"),
                 payload.optString("downloadUrl"),
-                payload.optString("releaseNotes")
+                payload.optString("releaseNotes"),
+                payload.optString("channel", channel)
         );
     }
 

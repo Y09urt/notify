@@ -29,7 +29,7 @@ export default {
       }
 
       if (request.method === "GET" && url.pathname === "/app/version") {
-        return appVersion(env);
+        return appVersion(url, env);
       }
 
       if (request.method === "POST" && url.pathname === "/auth/register") {
@@ -100,15 +100,45 @@ export default {
   },
 } satisfies ExportedHandler<Env, PushJob>;
 
-function appVersion(env: Env): Response {
-  const versionCode = Number(env.APP_LATEST_VERSION_CODE ?? "1");
+function appVersion(url: URL, env: Env): Response {
+  const rawChannel = url.searchParams.get("channel") ?? "release";
+  const channel = rawChannel === "debug" ? "debug" : "release";
+  const versionCode = Number(versionValue(env, channel, "VERSION_CODE") ?? "1");
   return json({
     ok: true,
+    channel,
     versionCode: Number.isFinite(versionCode) ? versionCode : 1,
-    versionName: env.APP_LATEST_VERSION_NAME ?? "1.0",
-    downloadUrl: env.APP_DOWNLOAD_URL ?? "",
-    releaseNotes: env.APP_RELEASE_NOTES ?? "",
+    versionName: versionValue(env, channel, "VERSION_NAME") ?? "1.0",
+    downloadUrl: versionValue(env, channel, "DOWNLOAD_URL") ?? "",
+    releaseNotes: versionValue(env, channel, "RELEASE_NOTES") ?? "",
   });
+}
+
+function versionValue(env: Env, channel: "debug" | "release", field: string): string | undefined {
+  const keys =
+    channel === "debug"
+      ? {
+          VERSION_CODE: "APP_DEBUG_LATEST_VERSION_CODE",
+          VERSION_NAME: "APP_DEBUG_LATEST_VERSION_NAME",
+          DOWNLOAD_URL: "APP_DEBUG_DOWNLOAD_URL",
+          RELEASE_NOTES: "APP_DEBUG_RELEASE_NOTES",
+        }
+      : {
+          VERSION_CODE: "APP_RELEASE_LATEST_VERSION_CODE",
+          VERSION_NAME: "APP_RELEASE_LATEST_VERSION_NAME",
+          DOWNLOAD_URL: "APP_RELEASE_DOWNLOAD_URL",
+          RELEASE_NOTES: "APP_RELEASE_NOTES",
+        };
+  const key = keys[field as keyof typeof keys];
+  const legacyKey =
+    field === "VERSION_CODE"
+      ? "APP_LATEST_VERSION_CODE"
+      : field === "VERSION_NAME"
+        ? "APP_LATEST_VERSION_NAME"
+        : field === "DOWNLOAD_URL"
+          ? "APP_DOWNLOAD_URL"
+          : "APP_RELEASE_NOTES";
+  return (env as unknown as Record<string, string | undefined>)[key] ?? (env as unknown as Record<string, string | undefined>)[legacyKey];
 }
 
 async function registerDevice(request: Request, env: Env): Promise<Response> {
