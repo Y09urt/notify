@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
         if (settings.hasSession()) {
             validateSession();
         } else {
-            setStatus("请先登录 Yogurt");
+            setStatus("请先登录 Notify");
             showLoginDialog();
         }
     }
@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
         root.setPadding(padding, dp(18), padding, dp(12));
 
         TextView title = new TextView(this);
-        title.setText("Yogurt");
+        title.setText("Notify");
         title.setTextSize(28);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(COLOR_TEXT);
@@ -225,7 +225,7 @@ public class MainActivity extends Activity {
         layout.addView(passwordInput);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("登录 Yogurt")
+                .setTitle("登录 Notify")
                 .setView(layout)
                 .setCancelable(false)
                 .setPositiveButton("登录", null)
@@ -507,7 +507,7 @@ public class MainActivity extends Activity {
         }
 
         TextView title = new TextView(this);
-        title.setText("Yogurt");
+        title.setText("Notify");
         title.setTextSize(24);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(COLOR_TEXT);

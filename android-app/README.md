@@ -1,4 +1,4 @@
-# Yogurt Android App
+# Notify Android App
 
 这是配合仓库根目录 Cloudflare Worker 使用的荣耀手机通知 App。
 
