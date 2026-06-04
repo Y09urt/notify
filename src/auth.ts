@@ -72,7 +72,6 @@ export async function logoutUser(request: Request, env: Env): Promise<Response> 
 }
 
 export async function authenticate(request: Request, env: Env): Promise<AuthUser> {
-  await ensureAuthSchema(env);
   const token = bearerToken(request);
   if (!token) {
     throw new HttpError(401, "login required");
@@ -83,6 +82,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthUser
     throw new HttpError(401, "invalid session");
   }
 
+  await ensureAuthSchema(env);
   const tokenHash = await sha256Hex(token);
   const session = await env.DB.prepare(
     "SELECT id, user_id, expires_at FROM sessions WHERE id = ? AND token_hash = ? AND expires_at > datetime('now')",
@@ -103,28 +103,26 @@ function ensureAuthSchema(env: Env): Promise<void> {
 }
 
 async function createAuthSchema(env: Env): Promise<void> {
-  await env.DB.batch([
-    env.DB.prepare(
-      `CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        password_hash TEXT NOT NULL,
-        salt TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )`,
-    ),
-    env.DB.prepare(
-      `CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        token_hash TEXT NOT NULL UNIQUE,
-        expires_at TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )`,
-    ),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)"),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)"),
-  ]);
+  await env.DB.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+  `);
 }
 
 async function readAuthBody(request: Request): Promise<{ id: string; password: string }> {
