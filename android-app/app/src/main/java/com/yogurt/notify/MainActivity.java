@@ -189,7 +189,7 @@ public class MainActivity extends Activity {
         pullRefreshPanel = new LinearLayout(this);
         pullRefreshPanel.setOrientation(LinearLayout.HORIZONTAL);
         pullRefreshPanel.setGravity(Gravity.CENTER);
-        pullRefreshPanel.setBackgroundColor(COLOR_SURFACE);
+        pullRefreshPanel.setBackgroundColor(COLOR_BACKGROUND);
 
         pullRefreshProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleSmall);
         pullRefreshProgress.setIndeterminate(true);
