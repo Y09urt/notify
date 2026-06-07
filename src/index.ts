@@ -500,8 +500,8 @@ function normalizeUserId(value: string | undefined): string {
 
 function normalizeGroupId(value: unknown): string {
   const text = requiredString(value, "groupId").toLowerCase();
-  if (!/^[\p{L}\p{N}_.-]{2,32}$/u.test(text)) {
-    throw new HttpError(400, "groupId must be 2-32 chars: letters, numbers, Chinese, _, . or -");
+  if (!/^[\p{L}\p{N}_.-]{1,32}$/u.test(text)) {
+    throw new HttpError(400, "groupId must be 1-32 chars: letters, numbers, Chinese, _, . or -");
   }
   return text;
 }
