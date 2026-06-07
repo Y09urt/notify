@@ -11,6 +11,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.net.Uri;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -47,8 +49,19 @@ public class MainActivity extends Activity {
     private static final int COLOR_SUCCESS = 0xFF059669;
     private static final int COLOR_WARNING = 0xFFD97706;
     private static final int COLOR_DANGER = 0xFFDC2626;
+    private static final long AUTO_SYNC_INTERVAL_MS = 15000L;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler autoSyncHandler = new Handler(Looper.getMainLooper());
+    private final Runnable autoSyncRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (settings != null && settings.hasSession()) {
+                fetchHistory(false);
+                autoSyncHandler.postDelayed(this, AUTO_SYNC_INTERVAL_MS);
+            }
+        }
+    };
     private MessageStore store;
     private SettingsStore settings;
     private WorkerApi api;
@@ -59,6 +72,7 @@ public class MainActivity extends Activity {
     private LinearLayout drawerPanel;
     private TextView sendMessageItem;
     private TextView groupManagementItem;
+    private boolean historyFetchRunning;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,6 +99,13 @@ public class MainActivity extends Activity {
         setIntent(intent);
         saveLaunchMessage();
         refreshLocal();
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopAutoSync();
+        executor.shutdownNow();
+        super.onDestroy();
     }
 
     private void buildUi() {
@@ -221,6 +242,7 @@ public class MainActivity extends Activity {
     private void enterApp() {
         fetchHistory();
         prepareMessageChannel();
+        startAutoSync();
     }
 
     private void showLoginDialog() {
@@ -293,6 +315,7 @@ public class MainActivity extends Activity {
             settings.clearSession();
             api = new WorkerApi(settings);
             runOnUiThread(() -> {
+                stopAutoSync();
                 refreshLocal();
                 setStatus("已退出登录");
                 showLoginDialog();
@@ -328,11 +351,21 @@ public class MainActivity extends Activity {
     }
 
     private void fetchHistory() {
+        fetchHistory(true);
+    }
+
+    private void fetchHistory(boolean showStatus) {
         if (!settings.hasSession()) {
             showLoginDialog();
             return;
         }
-        setStatus("正在拉取历史消息...");
+        if (historyFetchRunning) {
+            return;
+        }
+        historyFetchRunning = true;
+        if (showStatus) {
+            setStatus("正在拉取历史消息...");
+        }
         executor.execute(() -> {
             try {
                 Log.i(TAG, "Fetching history for user " + settings.userId());
@@ -357,13 +390,28 @@ public class MainActivity extends Activity {
                     for (NotifyMessage message : newMessages) {
                         NotificationHelper.show(this, message);
                     }
-                    setStatus("历史消息已同步: " + messages.size() + " 条");
+                    if (showStatus || !newMessages.isEmpty()) {
+                        setStatus("历史消息已同步: " + messages.size() + " 条");
+                    }
                 });
             } catch (Exception error) {
                 Log.e(TAG, "Fetch history failed", error);
-                runOnUiThread(() -> setStatus("历史消息同步失败: " + error.getMessage()));
+                if (showStatus) {
+                    runOnUiThread(() -> setStatus("历史消息同步失败: " + error.getMessage()));
+                }
+            } finally {
+                historyFetchRunning = false;
             }
         });
+    }
+
+    private void startAutoSync() {
+        autoSyncHandler.removeCallbacks(autoSyncRunnable);
+        autoSyncHandler.postDelayed(autoSyncRunnable, AUTO_SYNC_INTERVAL_MS);
+    }
+
+    private void stopAutoSync() {
+        autoSyncHandler.removeCallbacks(autoSyncRunnable);
     }
 
     private void refreshLocal() {
