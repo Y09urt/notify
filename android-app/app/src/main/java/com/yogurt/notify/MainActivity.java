@@ -17,7 +17,6 @@ import android.net.Uri;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -51,7 +50,6 @@ public class MainActivity extends Activity {
     private static final int COLOR_WARNING = 0xFFD97706;
     private static final int COLOR_DANGER = 0xFFDC2626;
     private static final long AUTO_SYNC_INTERVAL_MS = 15000L;
-    private static final float PULL_REFRESH_THRESHOLD_DP = 72f;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler autoSyncHandler = new Handler(Looper.getMainLooper());
@@ -70,14 +68,12 @@ public class MainActivity extends Activity {
     private LinearLayout messageList;
     private TextView statusView;
     private TextView countView;
-    private TextView pullRefreshHint;
+    private Button refreshButton;
     private View drawerScrim;
     private LinearLayout drawerPanel;
     private TextView sendMessageItem;
     private TextView groupManagementItem;
     private boolean historyFetchRunning;
-    private float pullStartY = -1f;
-    private boolean pullRefreshArmed;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,12 +118,29 @@ public class MainActivity extends Activity {
         int padding = dp(18);
         root.setPadding(padding, dp(18), padding, dp(12));
 
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView title = new TextView(this);
         title.setText("Notify");
         title.setTextSize(28);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(COLOR_TEXT);
-        root.addView(title);
+        topBar.addView(title, new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1
+        ));
+
+        Button more = new Button(this);
+        more.setText("☰");
+        more.setContentDescription("打开菜单");
+        styleButton(more, 0xFFFFFFFF, COLOR_PRIMARY);
+        more.setTextSize(22);
+        more.setOnClickListener(v -> openDrawer());
+        topBar.addView(more, iconActionParams());
+        root.addView(topBar, rowParams());
 
         TextView subtitle = new TextView(this);
         subtitle.setText("Notify 消息中心");
@@ -151,19 +164,6 @@ public class MainActivity extends Activity {
         statusParams.setMargins(0, 0, 0, dp(14));
         root.addView(statusView, statusParams);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.RIGHT);
-
-        Button more = new Button(this);
-        more.setText("☰");
-        more.setContentDescription("打开菜单");
-        styleButton(more, 0xFFFFFFFF, COLOR_PRIMARY);
-        more.setTextSize(22);
-        more.setOnClickListener(v -> openDrawer());
-        actions.addView(more, iconActionParams());
-        root.addView(actions, rowParams());
-
         LinearLayout sectionHeader = new LinearLayout(this);
         sectionHeader.setOrientation(LinearLayout.HORIZONTAL);
         sectionHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -185,19 +185,20 @@ public class MainActivity extends Activity {
         countView.setTextSize(13);
         countView.setTextColor(COLOR_MUTED);
         sectionHeader.addView(countView);
-        root.addView(sectionHeader);
 
-        pullRefreshHint = new TextView(this);
-        pullRefreshHint.setText("下拉刷新");
-        pullRefreshHint.setTextSize(13);
-        pullRefreshHint.setTextColor(COLOR_MUTED);
-        pullRefreshHint.setGravity(Gravity.CENTER);
-        pullRefreshHint.setVisibility(View.GONE);
-        pullRefreshHint.setPadding(0, dp(8), 0, dp(8));
-        root.addView(pullRefreshHint, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
+        refreshButton = new Button(this);
+        refreshButton.setText("↻");
+        refreshButton.setContentDescription("刷新消息");
+        refreshButton.setTextSize(18);
+        styleButton(refreshButton, 0xFFFFFFFF, COLOR_PRIMARY);
+        refreshButton.setOnClickListener(v -> fetchHistory());
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
+                dp(44),
+                dp(40)
+        );
+        refreshParams.setMargins(dp(10), 0, 0, 0);
+        sectionHeader.addView(refreshButton, refreshParams);
+        root.addView(sectionHeader);
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(false);
@@ -206,7 +207,6 @@ public class MainActivity extends Activity {
         messageList = new LinearLayout(this);
         messageList.setOrientation(LinearLayout.VERTICAL);
         scrollView.addView(messageList);
-        attachPullToRefresh(scrollView);
         root.addView(scrollView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -219,66 +219,6 @@ public class MainActivity extends Activity {
         ));
         buildDrawer(screen);
         setContentView(screen);
-    }
-
-    private void attachPullToRefresh(ScrollView scrollView) {
-        scrollView.setOnTouchListener((view, event) -> {
-            if (settings == null || !settings.hasSession()) {
-                return false;
-            }
-
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    if (scrollView.getScrollY() == 0 && !historyFetchRunning) {
-                        pullStartY = event.getY();
-                        pullRefreshArmed = false;
-                    }
-                    break;
-                case MotionEvent.ACTION_MOVE:
-                    if (pullStartY >= 0 && scrollView.getScrollY() == 0 && !historyFetchRunning) {
-                        float distance = event.getY() - pullStartY;
-                        if (distance > dp(10)) {
-                            updatePullRefreshHint(distance);
-                        }
-                    }
-                    break;
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_CANCEL:
-                    if (pullStartY >= 0) {
-                        boolean shouldRefresh = pullRefreshArmed && !historyFetchRunning;
-                        pullStartY = -1f;
-                        pullRefreshArmed = false;
-                        if (shouldRefresh) {
-                            setPullRefreshHint("正在刷新...", true);
-                            fetchHistory();
-                        } else if (!historyFetchRunning) {
-                            hidePullRefreshHint();
-                        }
-                    }
-                    break;
-                default:
-                    break;
-            }
-            return false;
-        });
-    }
-
-    private void updatePullRefreshHint(float distance) {
-        boolean armed = distance >= dp((int) PULL_REFRESH_THRESHOLD_DP);
-        pullRefreshArmed = armed;
-        setPullRefreshHint(armed ? "松开刷新" : "下拉刷新", true);
-    }
-
-    private void setPullRefreshHint(String text, boolean visible) {
-        if (pullRefreshHint == null) {
-            return;
-        }
-        pullRefreshHint.setText(text);
-        pullRefreshHint.setVisibility(visible ? View.VISIBLE : View.GONE);
-    }
-
-    private void hidePullRefreshHint() {
-        setPullRefreshHint("下拉刷新", false);
     }
 
     private void requestNotificationPermission() {
@@ -436,13 +376,16 @@ public class MainActivity extends Activity {
 
     private void fetchHistory(boolean showStatus) {
         if (!settings.hasSession()) {
+            setRefreshEnabled(true);
             showLoginDialog();
             return;
         }
         if (historyFetchRunning) {
+            setRefreshEnabled(true);
             return;
         }
         historyFetchRunning = true;
+        setRefreshEnabled(false);
         if (showStatus) {
             setStatus("正在拉取历史消息...");
         }
@@ -467,8 +410,10 @@ public class MainActivity extends Activity {
                 settings.setLastHistorySyncAt(newestMessageAt);
                 runOnUiThread(() -> {
                     refreshLocal();
-                    for (NotifyMessage message : newMessages) {
-                        NotificationHelper.show(this, message);
+                    if (!showStatus) {
+                        for (NotifyMessage message : newMessages) {
+                            NotificationHelper.show(this, message);
+                        }
                     }
                     if (showStatus || !newMessages.isEmpty()) {
                         setStatus("历史消息已同步: " + messages.size() + " 条");
@@ -481,9 +426,16 @@ public class MainActivity extends Activity {
                 }
             } finally {
                 historyFetchRunning = false;
-                runOnUiThread(this::hidePullRefreshHint);
+                runOnUiThread(() -> setRefreshEnabled(true));
             }
         });
+    }
+
+    private void setRefreshEnabled(boolean enabled) {
+        if (refreshButton != null) {
+            refreshButton.setEnabled(enabled);
+            refreshButton.setAlpha(enabled ? 1.0f : 0.55f);
+        }
     }
 
     private void startAutoSync() {
@@ -557,16 +509,6 @@ public class MainActivity extends Activity {
                 LinearLayout.LayoutParams.WRAP_CONTENT
         );
         params.setMargins(0, 0, 0, dp(8));
-        return params;
-    }
-
-    private LinearLayout.LayoutParams actionParams(int weight, int left, int right) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                0,
-                dp(44),
-                weight
-        );
-        params.setMargins(dp(left), 0, dp(right), 0);
         return params;
     }
 
