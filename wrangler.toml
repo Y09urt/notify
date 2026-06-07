@@ -7,6 +7,13 @@ keep_vars = true
 enabled = true
 head_sampling_rate = 1
 
+[observability.logs]
+enabled = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+
 [vars]
 # Non-sensitive defaults are deployed automatically when Cloudflare builds from GitHub.
 HONOR_APP_ID = "104567925"
