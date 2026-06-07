@@ -27,13 +27,10 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
     },
     body: JSON.stringify({
       data,
-      notification: {
-        title: job.title,
-        body: job.body,
-      },
       android: {
-        data,
         notification: {
+          title: job.title,
+          body: job.body,
           foregroundShow: true,
           clickAction: {
             type: 3,
