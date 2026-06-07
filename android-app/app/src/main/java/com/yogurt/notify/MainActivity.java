@@ -12,8 +12,6 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.net.Uri;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -54,20 +52,9 @@ public class MainActivity extends Activity {
     private static final int COLOR_SUCCESS = 0xFF059669;
     private static final int COLOR_WARNING = 0xFFD97706;
     private static final int COLOR_DANGER = 0xFFDC2626;
-    private static final long AUTO_SYNC_INTERVAL_MS = 15000L;
     private static final float PULL_REFRESH_THRESHOLD_DP = 72f;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Handler autoSyncHandler = new Handler(Looper.getMainLooper());
-    private final Runnable autoSyncRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (settings != null && settings.hasSession()) {
-                fetchHistory(false);
-                autoSyncHandler.postDelayed(this, AUTO_SYNC_INTERVAL_MS);
-            }
-        }
-    };
     private MessageStore store;
     private SettingsStore settings;
     private WorkerApi api;
@@ -116,7 +103,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        stopAutoSync();
         executor.shutdownNow();
         super.onDestroy();
     }
@@ -368,7 +354,6 @@ public class MainActivity extends Activity {
     private void enterApp() {
         fetchHistory();
         prepareMessageChannel();
-        startAutoSync();
     }
 
     private void showLoginDialog() {
@@ -441,7 +426,6 @@ public class MainActivity extends Activity {
             settings.clearSession();
             api = new WorkerApi(settings);
             runOnUiThread(() -> {
-                stopAutoSync();
                 refreshLocal();
                 setStatus("已退出登录");
                 showLoginDialog();
@@ -560,15 +544,6 @@ public class MainActivity extends Activity {
             return;
         }
         finishPullRefresh();
-    }
-
-    private void startAutoSync() {
-        autoSyncHandler.removeCallbacks(autoSyncRunnable);
-        autoSyncHandler.postDelayed(autoSyncRunnable, AUTO_SYNC_INTERVAL_MS);
-    }
-
-    private void stopAutoSync() {
-        autoSyncHandler.removeCallbacks(autoSyncRunnable);
     }
 
     private void refreshLocal() {
