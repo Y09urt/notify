@@ -229,6 +229,15 @@ curl -X POST "https://你的-worker域名/push" \
   -d '{"groupId":"admins","title":"群发消息","body":"这条消息会发给 admins 用户组"}'
 ```
 
+也可以按用户组名称推送：
+
+```bash
+curl -X POST "https://你的-worker域名/push" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer 你的ADMIN_TOKEN" \
+  -d '{"groupName":"管理员","title":"群发消息","body":"这条消息会发给名为 管理员 的用户组"}'
+```
+
 直接给某个 PushToken 推送：
 
 ```bash

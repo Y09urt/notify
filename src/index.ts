@@ -225,10 +225,14 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   const token = optionalString(body.token);
   const userId = optionalString(body.userId);
   const groupId = optionalString(body.groupId);
+  const groupName = optionalString(body.groupName);
   const platform = optionalString(body.platform) ?? "honor";
 
-  if (!token && !userId && !groupId) {
-    throw new HttpError(400, "token, userId or groupId is required");
+  if (!token && !userId && !groupId && !groupName) {
+    throw new HttpError(400, "token, userId, groupId or groupName is required");
+  }
+  if (groupId && groupName) {
+    throw new HttpError(400, "send to either groupId or groupName");
   }
 
   if (platform !== "honor") {
@@ -246,8 +250,9 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
     await saveMessage(env, targetUserId, title, messageBody, data);
   }
 
-  if (groupId) {
-    const targetUserIds = await userIdsForGroup(env, groupId);
+  if (groupId || groupName) {
+    const targetGroupId = groupId ? normalizeGroupId(groupId) : await groupIdForName(env, requiredString(groupName, "groupName"));
+    const targetUserIds = await userIdsForGroup(env, targetGroupId);
     for (const targetUserId of targetUserIds) {
       jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data)));
       await saveMessage(env, targetUserId, title, messageBody, data);
@@ -267,16 +272,20 @@ async function sendMessage(request: Request, env: Env): Promise<Response> {
   const data = normalizeData(body.data);
   const targetUserId = optionalString(body.userId);
   const targetGroupId = optionalString(body.groupId);
+  const targetGroupName = optionalString(body.groupName);
 
-  if (!targetUserId && !targetGroupId) {
-    throw new HttpError(400, "userId or groupId is required");
+  if (!targetUserId && !targetGroupId && !targetGroupName) {
+    throw new HttpError(400, "userId, groupId or groupName is required");
   }
-  if (targetUserId && targetGroupId) {
-    throw new HttpError(400, "send to either userId or groupId");
+  if ([targetUserId, targetGroupId, targetGroupName].filter(Boolean).length > 1) {
+    throw new HttpError(400, "send to only one target");
   }
 
-  const targetUserIds = targetGroupId
-    ? await userIdsForGroup(env, targetGroupId)
+  const targetUserIds = targetGroupId || targetGroupName
+    ? await userIdsForGroup(
+        env,
+        targetGroupId ? normalizeGroupId(targetGroupId) : await groupIdForName(env, requiredString(targetGroupName, "groupName")),
+      )
     : [normalizeUserId(targetUserId)];
   const jobs: PushJob[] = [];
   for (const userId of targetUserIds) {
@@ -453,6 +462,20 @@ async function userIdsForGroup(env: Env, groupId: string): Promise<string[]> {
     .bind(normalizeGroupId(groupId))
     .all<UserGroupMemberRow>();
   return (result.results ?? []).map((row) => row.user_id);
+}
+
+async function groupIdForName(env: Env, groupName: string): Promise<string> {
+  const result = await env.DB.prepare("SELECT id FROM user_groups WHERE name = ? ORDER BY id")
+    .bind(groupName)
+    .all<{ id: string }>();
+  const rows = result.results ?? [];
+  if (rows.length === 0) {
+    throw new HttpError(404, "groupName not found");
+  }
+  if (rows.length > 1) {
+    throw new HttpError(400, "groupName matches multiple groups; use groupId");
+  }
+  return rows[0].id;
 }
 
 async function listMessages(request: Request, url: URL, env: Env): Promise<Response> {

@@ -42,6 +42,7 @@ export interface PushRequest {
   token?: unknown;
   userId?: unknown;
   groupId?: unknown;
+  groupName?: unknown;
   platform?: unknown;
   title?: unknown;
   body?: unknown;
