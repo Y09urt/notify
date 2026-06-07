@@ -261,8 +261,15 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
-  return json({ ok: true, queued: jobs.length }, 202);
+  if (jobs.length === 0) {
+    throw new HttpError(409, "no registered Honor push tokens for target");
+  }
+
+  const delivery = await sendJobsNow(env, jobs);
+  if (delivery.failed > 0) {
+    throw new HttpError(502, `push delivery failed: ${delivery.firstError}`);
+  }
+  return json({ ok: true, sent: delivery.sent, failed: delivery.failed }, 202);
 }
 
 async function sendMessage(request: Request, env: Env): Promise<Response> {
@@ -295,8 +302,52 @@ async function sendMessage(request: Request, env: Env): Promise<Response> {
     jobs.push(...(await jobsForUser(env, userId, title, messageBody, data, messageId)));
     await saveMessage(env, userId, title, messageBody, data, messageId);
   }
-  await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
-  return json({ ok: true, queued: jobs.length, recipients: targetUserIds.length }, 202);
+  if (jobs.length === 0) {
+    throw new HttpError(409, "no registered Honor push tokens for target");
+  }
+
+  const delivery = await sendJobsNow(env, jobs);
+  if (delivery.failed > 0) {
+    throw new HttpError(502, `push delivery failed: ${delivery.firstError}`);
+  }
+  return json({ ok: true, sent: delivery.sent, failed: delivery.failed, recipients: targetUserIds.length }, 202);
+}
+
+async function sendJobsNow(
+  env: Env,
+  jobs: PushJob[],
+): Promise<{ sent: number; failed: number; firstError?: string }> {
+  let sent = 0;
+  let failed = 0;
+  let firstError: string | undefined;
+
+  for (const job of jobs) {
+    try {
+      await sendHonor(env, job);
+      sent += 1;
+      if (job.tokenId) {
+        await env.DB.prepare(
+          "UPDATE push_tokens SET last_error = NULL, updated_at = datetime('now') WHERE id = ?",
+        )
+          .bind(job.tokenId)
+          .run();
+      }
+    } catch (error) {
+      failed += 1;
+      const lastError = error instanceof Error ? error.message : String(error);
+      firstError ??= lastError;
+      console.error("push failed", lastError);
+      if (job.tokenId) {
+        await env.DB.prepare(
+          "UPDATE push_tokens SET last_error = ?, updated_at = datetime('now') WHERE id = ?",
+        )
+          .bind(lastError.slice(0, 1000), job.tokenId)
+          .run();
+      }
+    }
+  }
+
+  return { sent, failed, firstError };
 }
 
 async function listGroups(request: Request, env: Env): Promise<Response> {
