@@ -215,10 +215,11 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   const data = normalizeData(body.data);
   const token = optionalString(body.token);
   const userId = optionalString(body.userId);
+  const groupId = optionalString(body.groupId);
   const platform = optionalString(body.platform) ?? "honor";
 
-  if (!token && !userId) {
-    throw new HttpError(400, "token or userId is required");
+  if (!token && !userId && !groupId) {
+    throw new HttpError(400, "token, userId or groupId is required");
   }
 
   if (platform !== "honor") {
@@ -231,8 +232,17 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   }
 
   if (userId) {
-    jobs.push(...(await jobsForUser(env, userId, title, messageBody, data)));
-    await saveMessage(env, userId, title, messageBody, data);
+    const targetUserId = normalizeUserId(userId);
+    jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data)));
+    await saveMessage(env, targetUserId, title, messageBody, data);
+  }
+
+  if (groupId) {
+    const targetUserIds = await userIdsForGroup(env, groupId);
+    for (const targetUserId of targetUserIds) {
+      jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data)));
+      await saveMessage(env, targetUserId, title, messageBody, data);
+    }
   }
 
   await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
