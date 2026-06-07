@@ -1,6 +1,7 @@
 package com.yogurt.notify;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -17,13 +18,17 @@ import android.net.Uri;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -50,6 +55,7 @@ public class MainActivity extends Activity {
     private static final int COLOR_WARNING = 0xFFD97706;
     private static final int COLOR_DANGER = 0xFFDC2626;
     private static final long AUTO_SYNC_INTERVAL_MS = 15000L;
+    private static final float PULL_REFRESH_THRESHOLD_DP = 72f;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler autoSyncHandler = new Handler(Looper.getMainLooper());
@@ -68,12 +74,18 @@ public class MainActivity extends Activity {
     private LinearLayout messageList;
     private TextView statusView;
     private TextView countView;
-    private Button refreshButton;
+    private LinearLayout pullRefreshPanel;
+    private ProgressBar pullRefreshProgress;
+    private TextView pullRefreshText;
     private View drawerScrim;
     private LinearLayout drawerPanel;
     private TextView sendMessageItem;
     private TextView groupManagementItem;
     private boolean historyFetchRunning;
+    private float pullStartY = -1f;
+    private boolean pullRefreshDragging;
+    private boolean pullRefreshArmed;
+    private boolean pullRefreshActive;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -186,27 +198,39 @@ public class MainActivity extends Activity {
         countView.setTextColor(COLOR_MUTED);
         sectionHeader.addView(countView);
 
-        refreshButton = new Button(this);
-        refreshButton.setText("↻");
-        refreshButton.setContentDescription("刷新消息");
-        refreshButton.setTextSize(18);
-        styleButton(refreshButton, 0xFFFFFFFF, COLOR_PRIMARY);
-        refreshButton.setOnClickListener(v -> fetchHistory());
-        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
-                dp(44),
-                dp(40)
-        );
-        refreshParams.setMargins(dp(10), 0, 0, 0);
-        sectionHeader.addView(refreshButton, refreshParams);
         root.addView(sectionHeader);
+
+        pullRefreshPanel = new LinearLayout(this);
+        pullRefreshPanel.setOrientation(LinearLayout.HORIZONTAL);
+        pullRefreshPanel.setGravity(Gravity.CENTER);
+        pullRefreshPanel.setBackgroundColor(COLOR_SURFACE);
+
+        pullRefreshProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleSmall);
+        pullRefreshProgress.setIndeterminate(true);
+        pullRefreshProgress.setVisibility(View.GONE);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(dp(24), dp(24));
+        progressParams.setMargins(0, 0, dp(8), 0);
+        pullRefreshPanel.addView(pullRefreshProgress, progressParams);
+
+        pullRefreshText = new TextView(this);
+        pullRefreshText.setText("下拉刷新");
+        pullRefreshText.setTextSize(13);
+        pullRefreshText.setTextColor(COLOR_MUTED);
+        pullRefreshPanel.addView(pullRefreshText);
+        root.addView(pullRefreshPanel, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0
+        ));
 
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(false);
         scrollView.setClipToPadding(false);
         scrollView.setPadding(0, 0, 0, dp(8));
+        scrollView.setOverScrollMode(View.OVER_SCROLL_ALWAYS);
         messageList = new LinearLayout(this);
         messageList.setOrientation(LinearLayout.VERTICAL);
         scrollView.addView(messageList);
+        attachPullToRefresh(scrollView);
         root.addView(scrollView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
@@ -219,6 +243,95 @@ public class MainActivity extends Activity {
         ));
         buildDrawer(screen);
         setContentView(screen);
+    }
+
+    private void attachPullToRefresh(ScrollView scrollView) {
+        scrollView.setOnTouchListener((view, event) -> {
+            if (settings == null || !settings.hasSession()) {
+                return false;
+            }
+
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    if (scrollView.getScrollY() == 0 && !historyFetchRunning && !pullRefreshActive) {
+                        pullStartY = event.getY();
+                    }
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (pullStartY >= 0 && scrollView.getScrollY() == 0 && !historyFetchRunning && !pullRefreshActive) {
+                        float distance = event.getY() - pullStartY;
+                        if (distance > dp(8)) {
+                            updatePullRefresh(distance);
+                            return true;
+                        }
+                    }
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (pullRefreshDragging) {
+                        boolean shouldRefresh = pullRefreshArmed && !historyFetchRunning && !pullRefreshActive;
+                        pullStartY = -1f;
+                        pullRefreshDragging = false;
+                        pullRefreshArmed = false;
+                        if (shouldRefresh) {
+                            beginPullRefresh();
+                        } else if (!pullRefreshActive) {
+                            finishPullRefresh();
+                        }
+                        return true;
+                    }
+                    pullStartY = -1f;
+                    pullRefreshArmed = false;
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        });
+    }
+
+    private void updatePullRefresh(float distance) {
+        pullRefreshDragging = true;
+        pullRefreshArmed = distance >= dp((int) PULL_REFRESH_THRESHOLD_DP);
+        pullRefreshProgress.setVisibility(View.GONE);
+        pullRefreshText.setText(pullRefreshArmed ? "松开刷新" : "下拉刷新");
+        setPullRefreshHeight(Math.min((int) (distance * 0.58f), dp(86)));
+    }
+
+    private void beginPullRefresh() {
+        pullRefreshActive = true;
+        pullRefreshProgress.setVisibility(View.VISIBLE);
+        pullRefreshText.setText("正在刷新...");
+        animatePullRefreshHeight(dp(54));
+        fetchHistory(true, true);
+    }
+
+    private void finishPullRefresh() {
+        pullRefreshActive = false;
+        pullRefreshProgress.setVisibility(View.GONE);
+        pullRefreshText.setText("下拉刷新");
+        animatePullRefreshHeight(0);
+    }
+
+    private void setPullRefreshHeight(int height) {
+        if (pullRefreshPanel == null) {
+            return;
+        }
+        ViewGroup.LayoutParams params = pullRefreshPanel.getLayoutParams();
+        params.height = height;
+        pullRefreshPanel.setLayoutParams(params);
+    }
+
+    private void animatePullRefreshHeight(int targetHeight) {
+        if (pullRefreshPanel == null) {
+            return;
+        }
+        int startHeight = pullRefreshPanel.getLayoutParams().height;
+        ValueAnimator animator = ValueAnimator.ofInt(startHeight, targetHeight);
+        animator.setDuration(180);
+        animator.setInterpolator(new DecelerateInterpolator());
+        animator.addUpdateListener(animation -> setPullRefreshHeight((int) animation.getAnimatedValue()));
+        animator.start();
     }
 
     private void requestNotificationPermission() {
@@ -371,21 +484,29 @@ public class MainActivity extends Activity {
     }
 
     private void fetchHistory() {
-        fetchHistory(true);
+        fetchHistory(true, false);
     }
 
     private void fetchHistory(boolean showStatus) {
+        fetchHistory(showStatus, false);
+    }
+
+    private void fetchHistory(boolean showStatus, boolean showRefreshIndicator) {
         if (!settings.hasSession()) {
-            setRefreshEnabled(true);
+            setRefreshActive(false);
             showLoginDialog();
             return;
         }
         if (historyFetchRunning) {
-            setRefreshEnabled(true);
+            if (showRefreshIndicator) {
+                setRefreshActive(false);
+            }
             return;
         }
         historyFetchRunning = true;
-        setRefreshEnabled(false);
+        if (showRefreshIndicator) {
+            setRefreshActive(true);
+        }
         if (showStatus) {
             setStatus("正在拉取历史消息...");
         }
@@ -426,16 +547,19 @@ public class MainActivity extends Activity {
                 }
             } finally {
                 historyFetchRunning = false;
-                runOnUiThread(() -> setRefreshEnabled(true));
+                if (showRefreshIndicator) {
+                    runOnUiThread(() -> setRefreshActive(false));
+                }
             }
         });
     }
 
-    private void setRefreshEnabled(boolean enabled) {
-        if (refreshButton != null) {
-            refreshButton.setEnabled(enabled);
-            refreshButton.setAlpha(enabled ? 1.0f : 0.55f);
+    private void setRefreshActive(boolean active) {
+        if (active) {
+            pullRefreshActive = true;
+            return;
         }
+        finishPullRefresh();
     }
 
     private void startAutoSync() {
