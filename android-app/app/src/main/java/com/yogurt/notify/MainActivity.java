@@ -790,6 +790,18 @@ public class MainActivity extends Activity {
         int padding = dp(16);
         layout.setPadding(padding, padding, padding, 0);
 
+        TextView membersView = new TextView(this);
+        membersView.setText("选择用户组后会显示成员");
+        membersView.setTextColor(COLOR_MUTED);
+
+        Button chooseGroup = new Button(this);
+        chooseGroup.setText("选择已有用户组");
+        styleButton(chooseGroup, 0xFFFFFFFF, COLOR_PRIMARY);
+        layout.addView(chooseGroup, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44)
+        ));
+
         EditText groupIdInput = new EditText(this);
         groupIdInput.setHint("用户组 ID，例如 admins");
         groupIdInput.setSingleLine(true);
@@ -809,6 +821,8 @@ public class MainActivity extends Activity {
         memberInput.setHint("成员账号 ID");
         memberInput.setSingleLine(true);
         layout.addView(memberInput);
+        membersView.setPadding(0, dp(12), 0, 0);
+        layout.addView(membersView);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("用户组管理")
@@ -818,17 +832,92 @@ public class MainActivity extends Activity {
                 .setNeutralButton("移除成员", null)
                 .create();
         dialog.setOnShowListener(view -> {
+            chooseGroup.setOnClickListener(button ->
+                    chooseGroupForManagement(groupIdInput, groupNameInput, adminCheck, membersView));
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button ->
-                    saveGroupFromDialog(groupIdInput, groupNameInput, adminCheck));
+                    saveGroupFromDialog(groupIdInput, groupNameInput, adminCheck, membersView));
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(button ->
-                    updateGroupMemberFromDialog(groupIdInput, memberInput, true));
+                    updateGroupMemberFromDialog(groupIdInput, memberInput, true, membersView));
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(button ->
-                    updateGroupMemberFromDialog(groupIdInput, memberInput, false));
+                    updateGroupMemberFromDialog(groupIdInput, memberInput, false, membersView));
         });
         dialog.show();
     }
 
-    private void saveGroupFromDialog(EditText groupIdInput, EditText groupNameInput, CheckBox adminCheck) {
+    private void chooseGroupForManagement(
+            EditText groupIdInput,
+            EditText groupNameInput,
+            CheckBox adminCheck,
+            TextView membersView
+    ) {
+        setStatus("正在读取用户组...");
+        executor.execute(() -> {
+            try {
+                List<WorkerApi.UserGroup> groups = api.fetchGroups();
+                runOnUiThread(() -> showManagementGroupPicker(groups, groupIdInput, groupNameInput, adminCheck, membersView));
+            } catch (Exception error) {
+                Log.e(TAG, "Fetch groups failed", error);
+                runOnUiThread(() -> setStatus("读取用户组失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showManagementGroupPicker(
+            List<WorkerApi.UserGroup> groups,
+            EditText groupIdInput,
+            EditText groupNameInput,
+            CheckBox adminCheck,
+            TextView membersView
+    ) {
+        if (groups.isEmpty()) {
+            setStatus("还没有用户组");
+            return;
+        }
+        String[] labels = new String[groups.size()];
+        for (int i = 0; i < groups.size(); i++) {
+            WorkerApi.UserGroup group = groups.get(i);
+            labels[i] = group.name + " (" + group.id + ", " + group.memberCount + " 人)";
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("选择已有用户组")
+                .setItems(labels, (dialog, which) -> {
+                    WorkerApi.UserGroup group = groups.get(which);
+                    groupIdInput.setText(group.id);
+                    groupNameInput.setText(group.name);
+                    adminCheck.setChecked(group.isAdmin);
+                    refreshGroupMembers(group.id, membersView);
+                })
+                .show();
+    }
+
+    private void refreshGroupMembers(String groupId, TextView membersView) {
+        if (groupId == null || groupId.trim().isEmpty()) {
+            membersView.setText("选择用户组后会显示成员");
+            return;
+        }
+        executor.execute(() -> {
+            try {
+                List<String> members = api.fetchGroupMembers(groupId.trim());
+                runOnUiThread(() -> membersView.setText(formatGroupMembers(members)));
+            } catch (Exception error) {
+                Log.e(TAG, "Fetch group members failed", error);
+                runOnUiThread(() -> membersView.setText("成员读取失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private String formatGroupMembers(List<String> members) {
+        if (members.isEmpty()) {
+            return "组内成员:\n暂无成员";
+        }
+        StringBuilder text = new StringBuilder("组内成员:\n");
+        for (String member : members) {
+            text.append("- ").append(member).append("\n");
+        }
+        return text.toString();
+    }
+
+    private void saveGroupFromDialog(EditText groupIdInput, EditText groupNameInput, CheckBox adminCheck, TextView membersView) {
         String groupId = groupIdInput.getText().toString().trim();
         String groupName = groupNameInput.getText().toString().trim();
         if (groupId.isEmpty()) {
@@ -843,7 +932,10 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             try {
                 api.saveGroup(groupId, groupName, adminCheck.isChecked());
-                runOnUiThread(() -> setStatus("用户组已保存"));
+                runOnUiThread(() -> {
+                    setStatus("用户组已保存");
+                    refreshGroupMembers(groupId, membersView);
+                });
             } catch (Exception error) {
                 Log.e(TAG, "Save group failed", error);
                 runOnUiThread(() -> setStatus("保存用户组失败: " + error.getMessage()));
@@ -851,7 +943,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void updateGroupMemberFromDialog(EditText groupIdInput, EditText memberInput, boolean add) {
+    private void updateGroupMemberFromDialog(EditText groupIdInput, EditText memberInput, boolean add, TextView membersView) {
         String groupId = groupIdInput.getText().toString().trim();
         String userId = memberInput.getText().toString().trim();
         if (groupId.isEmpty()) {
@@ -866,7 +958,10 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             try {
                 api.setGroupMember(groupId, userId, add);
-                runOnUiThread(() -> setStatus(add ? "成员已添加" : "成员已移除"));
+                runOnUiThread(() -> {
+                    setStatus(add ? "成员已添加" : "成员已移除");
+                    refreshGroupMembers(groupId, membersView);
+                });
             } catch (Exception error) {
                 Log.e(TAG, "Update group member failed", error);
                 runOnUiThread(() -> setStatus("更新成员失败: " + error.getMessage()));

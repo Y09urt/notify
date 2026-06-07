@@ -65,6 +65,10 @@ export default {
         return await listGroups(request, env);
       }
 
+      if (request.method === "GET" && url.pathname === "/groups/members") {
+        return await listGroupMembers(request, url, env);
+      }
+
       if (request.method === "POST" && url.pathname === "/groups") {
         return await saveGroup(request, env);
       }
@@ -319,6 +323,23 @@ async function saveGroup(request: Request, env: Env): Promise<Response> {
     .run();
 
   return json({ ok: true, group: { id, name, isAdmin } });
+}
+
+async function listGroupMembers(request: Request, url: URL, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  await requireAdmin(env, auth.userId);
+  const groupId = normalizeGroupId(url.searchParams.get("groupId"));
+  const result = await env.DB.prepare(
+    "SELECT user_id FROM user_group_members WHERE group_id = ? ORDER BY user_id",
+  )
+    .bind(groupId)
+    .all<UserGroupMemberRow>();
+
+  return json({
+    ok: true,
+    groupId,
+    members: (result.results ?? []).map((row) => row.user_id),
+  });
 }
 
 async function updateGroupMember(request: Request, env: Env): Promise<Response> {
