@@ -510,6 +510,7 @@ public class MainActivity extends Activity {
         groupManagementItem = drawerItem("用户组管理", COLOR_PRIMARY, this::showGroupManagementDialog);
         groupManagementItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
         drawerPanel.addView(groupManagementItem);
+        drawerPanel.addView(drawerItem("当前账号", COLOR_TEXT, this::showCurrentAccountDialog));
         drawerPanel.addView(drawerItem("设置服务器", COLOR_PRIMARY, this::showSettingsDialog));
         drawerPanel.addView(drawerItem("检查更新", COLOR_PRIMARY, this::checkForUpdates));
         drawerPanel.addView(drawerItem("添加本地测试消息", COLOR_WARNING, this::addLocalTestMessage));
@@ -552,6 +553,53 @@ public class MainActivity extends Activity {
         if (groupManagementItem != null) {
             groupManagementItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
         }
+    }
+
+    private void showCurrentAccountDialog() {
+        if (!settings.hasSession()) {
+            showLoginDialog();
+            return;
+        }
+        setStatus("正在读取账号信息...");
+        executor.execute(() -> {
+            try {
+                WorkerApi.UserInfo user = api.checkSession();
+                settings.setSession(user.userId, settings.sessionToken(), user.isAdmin);
+                runOnUiThread(() -> {
+                    updateAdminUi();
+                    showCurrentAccountResult(user);
+                    setStatus("账号信息已更新");
+                });
+            } catch (Exception error) {
+                Log.e(TAG, "Fetch current account failed", error);
+                runOnUiThread(() -> setStatus("读取账号信息失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showCurrentAccountResult(WorkerApi.UserInfo user) {
+        StringBuilder message = new StringBuilder();
+        message.append("账号 ID: ").append(user.userId).append("\n");
+        message.append("权限: ").append(user.isAdmin ? "管理员" : "普通用户").append("\n\n");
+        message.append("用户组:\n");
+        if (user.groups.isEmpty()) {
+            message.append("暂无用户组");
+        } else {
+            for (WorkerApi.UserGroup group : user.groups) {
+                message
+                        .append("- ")
+                        .append(group.name)
+                        .append(" (")
+                        .append(group.id)
+                        .append(group.isAdmin ? ", 管理员组" : "")
+                        .append(")\n");
+            }
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("当前账号")
+                .setMessage(message.toString())
+                .setPositiveButton("确定", null)
+                .show();
     }
 
     private void openDrawer() {

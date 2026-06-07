@@ -62,7 +62,12 @@ export async function loginUser(request: Request, env: Env): Promise<Response> {
 
 export async function currentUser(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
-  return json({ ok: true, userId: auth.userId, isAdmin: await isAdminUser(env, auth.userId) });
+  return json({
+    ok: true,
+    userId: auth.userId,
+    isAdmin: await isAdminUser(env, auth.userId),
+    groups: await groupsForUser(env, auth.userId),
+  });
 }
 
 export async function logoutUser(request: Request, env: Env): Promise<Response> {
@@ -113,6 +118,24 @@ export async function isAdminUser(env: Env, userId: string): Promise<boolean> {
     .bind(userId)
     .first();
   return Boolean(row);
+}
+
+async function groupsForUser(env: Env, userId: string): Promise<Array<{ id: string; name: string; isAdmin: boolean }>> {
+  await ensureAuthSchema(env);
+  const result = await env.DB.prepare(
+    `SELECT groups.id, groups.name, groups.is_admin
+     FROM user_group_members members
+     JOIN user_groups groups ON groups.id = members.group_id
+     WHERE members.user_id = ?
+     ORDER BY groups.name`,
+  )
+    .bind(userId)
+    .all<{ id: string; name: string; is_admin: number }>();
+  return (result.results ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    isAdmin: row.is_admin === 1,
+  }));
 }
 
 function ensureAuthSchema(env: Env): Promise<void> {

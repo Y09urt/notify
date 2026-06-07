@@ -38,10 +38,12 @@ public final class WorkerApi {
     public static final class UserInfo {
         public final String userId;
         public final boolean isAdmin;
+        public final List<UserGroup> groups;
 
-        public UserInfo(String userId, boolean isAdmin) {
+        public UserInfo(String userId, boolean isAdmin, List<UserGroup> groups) {
             this.userId = userId;
             this.isAdmin = isAdmin;
+            this.groups = groups;
         }
     }
 
@@ -92,7 +94,11 @@ public final class WorkerApi {
     public UserInfo checkSession() throws Exception {
         String response = request("GET", "/auth/me", null);
         JSONObject payload = new JSONObject(response);
-        return new UserInfo(payload.optString("userId"), payload.optBoolean("isAdmin", false));
+        return new UserInfo(
+                payload.optString("userId"),
+                payload.optBoolean("isAdmin", false),
+                parseGroups(payload.optJSONArray("groups"))
+        );
     }
 
     public void logout() throws Exception {
@@ -135,7 +141,10 @@ public final class WorkerApi {
     public List<UserGroup> fetchGroups() throws Exception {
         String response = request("GET", "/groups", null);
         JSONObject payload = new JSONObject(response);
-        JSONArray rows = payload.optJSONArray("groups");
+        return parseGroups(payload.optJSONArray("groups"));
+    }
+
+    private List<UserGroup> parseGroups(JSONArray rows) throws Exception {
         ArrayList<UserGroup> groups = new ArrayList<>();
         if (rows == null) {
             return groups;
