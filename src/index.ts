@@ -34,6 +34,10 @@ export default {
         return json({ ok: true, version: "2026-06-04-auth-2" });
       }
 
+      if (request.method === "GET" && url.pathname === "/debug/honor-env") {
+        return await honorEnvDebug(request, env);
+      }
+
       if (request.method === "GET" && url.pathname === "/app/version") {
         return await appVersion(request, url, env);
       }
@@ -129,6 +133,30 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env, PushJob>;
+
+async function honorEnvDebug(request: Request, env: Env): Promise<Response> {
+  if (!isAdmin(request, env.ADMIN_TOKEN)) {
+    return json({ error: "missing or invalid admin token" }, 401);
+  }
+
+  const secret = env.HONOR_CLIENT_SECRET?.trim() ?? "";
+  const digest = secret
+    ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret))))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .slice(0, 12)
+    : "";
+
+  return json({
+    ok: true,
+    appId: env.HONOR_APP_ID?.trim() ?? "",
+    clientId: env.HONOR_CLIENT_ID?.trim() ?? "",
+    sendUrl: env.HONOR_SEND_URL?.trim() ?? "",
+    tokenUrl: env.HONOR_TOKEN_URL?.trim() ?? "",
+    clientSecretLength: secret.length,
+    clientSecretSha256Prefix: digest,
+  });
+}
 
 async function appVersion(request: Request, url: URL, env: Env): Promise<Response> {
   const rawChannel = url.searchParams.get("channel") ?? "release";

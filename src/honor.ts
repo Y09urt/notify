@@ -6,9 +6,10 @@ let cachedAccessToken: { token: string; expiresAt: number } | undefined;
 
 export async function sendHonor(env: Env, job: PushJob): Promise<void> {
   const accessToken = await getAccessToken(env);
+  const appId = envValue(env.HONOR_APP_ID, "HONOR_APP_ID");
   const sendUrl =
-    env.HONOR_SEND_URL?.replace("{appId}", env.HONOR_APP_ID) ??
-    `https://push-api.cloud.honor.com/api/v1/${env.HONOR_APP_ID}/sendMessage`;
+    env.HONOR_SEND_URL?.trim().replace("{appId}", appId) ??
+    `https://push-api.cloud.honor.com/api/v1/${appId}/sendMessage`;
   const messageId = job.messageId ?? crypto.randomUUID();
   const data = JSON.stringify({
     ...(job.data ?? {}),
@@ -71,13 +72,13 @@ async function getAccessToken(env: Env): Promise<string> {
     return cachedAccessToken.token;
   }
 
-  const response = await fetch(env.HONOR_TOKEN_URL ?? DEFAULT_TOKEN_URL, {
+  const response = await fetch(env.HONOR_TOKEN_URL?.trim() || DEFAULT_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      client_id: env.HONOR_CLIENT_ID,
-      client_secret: env.HONOR_CLIENT_SECRET,
+      client_id: envValue(env.HONOR_CLIENT_ID, "HONOR_CLIENT_ID"),
+      client_secret: envValue(env.HONOR_CLIENT_SECRET, "HONOR_CLIENT_SECRET"),
     }),
   });
 
@@ -104,4 +105,12 @@ async function getAccessToken(env: Env): Promise<string> {
   };
 
   return cachedAccessToken.token;
+}
+
+function envValue(value: string | undefined, name: string): string {
+  const text = value?.trim() ?? "";
+  if (!text) {
+    throw new Error(`${name} is not configured`);
+  }
+  return text;
 }
