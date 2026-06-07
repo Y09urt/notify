@@ -31,6 +31,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -329,11 +330,25 @@ public class MainActivity extends Activity {
                 Log.i(TAG, "Fetching history for user " + settings.userId());
                 List<NotifyMessage> messages = api.fetchMessages();
                 Log.i(TAG, "Fetched messages: " + messages.size());
+                long lastSyncAt = settings.lastHistorySyncAt();
+                long newestMessageAt = lastSyncAt;
+                List<NotifyMessage> newMessages = new java.util.ArrayList<>();
                 for (NotifyMessage message : messages) {
+                    boolean existed = store.exists(message.id);
                     store.save(message);
+                    if (message.createdAt > newestMessageAt) {
+                        newestMessageAt = message.createdAt;
+                    }
+                    if (lastSyncAt > 0 && !existed && message.createdAt > lastSyncAt) {
+                        newMessages.add(message);
+                    }
                 }
+                settings.setLastHistorySyncAt(newestMessageAt);
                 runOnUiThread(() -> {
                     refreshLocal();
+                    for (NotifyMessage message : newMessages) {
+                        NotificationHelper.show(this, message);
+                    }
                     setStatus("历史消息已同步: " + messages.size() + " 条");
                 });
             } catch (Exception error) {
@@ -363,6 +378,7 @@ public class MainActivity extends Activity {
         }
 
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
+        format.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
         for (NotifyMessage message : messages) {
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);

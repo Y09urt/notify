@@ -23,6 +23,7 @@ export interface Env {
 }
 
 export interface PushJob {
+  messageId?: string;
   tokenId?: string;
   platform: "honor";
   token: string;

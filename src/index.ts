@@ -241,21 +241,23 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
 
   const jobs: PushJob[] = [];
   if (token) {
-    jobs.push({ platform, token, title, body: messageBody, data });
+    jobs.push({ messageId: crypto.randomUUID(), platform, token, title, body: messageBody, data });
   }
 
   if (userId) {
     const targetUserId = normalizeUserId(userId);
-    jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data)));
-    await saveMessage(env, targetUserId, title, messageBody, data);
+    const messageId = crypto.randomUUID();
+    jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data, messageId)));
+    await saveMessage(env, targetUserId, title, messageBody, data, messageId);
   }
 
   if (groupId || groupName) {
     const targetGroupId = groupId ? normalizeGroupId(groupId) : await groupIdForName(env, requiredString(groupName, "groupName"));
     const targetUserIds = await userIdsForGroup(env, targetGroupId);
     for (const targetUserId of targetUserIds) {
-      jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data)));
-      await saveMessage(env, targetUserId, title, messageBody, data);
+      const messageId = crypto.randomUUID();
+      jobs.push(...(await jobsForUser(env, targetUserId, title, messageBody, data, messageId)));
+      await saveMessage(env, targetUserId, title, messageBody, data, messageId);
     }
   }
 
@@ -289,8 +291,9 @@ async function sendMessage(request: Request, env: Env): Promise<Response> {
     : [normalizeUserId(targetUserId)];
   const jobs: PushJob[] = [];
   for (const userId of targetUserIds) {
-    jobs.push(...(await jobsForUser(env, userId, title, messageBody, data)));
-    await saveMessage(env, userId, title, messageBody, data);
+    const messageId = crypto.randomUUID();
+    jobs.push(...(await jobsForUser(env, userId, title, messageBody, data, messageId)));
+    await saveMessage(env, userId, title, messageBody, data, messageId);
   }
   await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
   return json({ ok: true, queued: jobs.length, recipients: targetUserIds.length }, 202);
@@ -423,6 +426,7 @@ async function jobsForUser(
   title: string,
   messageBody: string,
   data: Record<string, string> | undefined,
+  messageId: string,
 ): Promise<PushJob[]> {
   const result = await env.DB.prepare(
     "SELECT id, token FROM push_tokens WHERE user_id = ? AND platform = 'honor'",
@@ -431,6 +435,7 @@ async function jobsForUser(
     .all<PushTokenRow>();
 
   return (result.results ?? []).map((row) => ({
+    messageId,
     tokenId: row.id,
     platform: "honor",
     token: row.token,
@@ -446,12 +451,13 @@ async function saveMessage(
   title: string,
   messageBody: string,
   data: Record<string, string> | undefined,
+  messageId: string,
 ): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO push_messages (id, user_id, title, body, data)
      VALUES (?, ?, ?, ?, ?)`,
   )
-    .bind(crypto.randomUUID(), userId, title, messageBody, data ? JSON.stringify(data) : null)
+    .bind(messageId, userId, title, messageBody, data ? JSON.stringify(data) : null)
     .run();
 }
 

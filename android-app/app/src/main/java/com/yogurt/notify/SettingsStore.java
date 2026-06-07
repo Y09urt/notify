@@ -8,6 +8,7 @@ public class SettingsStore {
     private static final String KEY_WORKER_URL = "worker_url";
     private static final String KEY_USER_ID = "user_id";
     private static final String KEY_LAST_TOKEN = "last_token";
+    private static final String KEY_LAST_HISTORY_SYNC_AT = "last_history_sync_at";
     private static final String KEY_SESSION_TOKEN = "session_token";
     private static final String KEY_IS_ADMIN = "is_admin";
 
@@ -27,6 +28,10 @@ public class SettingsStore {
 
     public String lastToken() {
         return prefs.getString(KEY_LAST_TOKEN, "");
+    }
+
+    public long lastHistorySyncAt() {
+        return prefs.getLong(KEY_LAST_HISTORY_SYNC_AT, 0);
     }
 
     public String sessionToken() {
@@ -51,6 +56,10 @@ public class SettingsStore {
 
     public void setLastToken(String value) {
         prefs.edit().putString(KEY_LAST_TOKEN, value).apply();
+    }
+
+    public void setLastHistorySyncAt(long value) {
+        prefs.edit().putLong(KEY_LAST_HISTORY_SYNC_AT, value).apply();
     }
 
     public void setSession(String userId, String sessionToken, boolean isAdmin) {

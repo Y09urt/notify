@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 public final class WorkerApi {
     private static final String TAG = "YogurtApp";
@@ -317,7 +318,9 @@ public final class WorkerApi {
             return System.currentTimeMillis();
         }
         try {
-            Date date = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).parse(createdAt);
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
+            format.setTimeZone(TimeZone.getTimeZone("UTC"));
+            Date date = format.parse(createdAt);
             return date == null ? System.currentTimeMillis() : date.getTime();
         } catch (Exception ignored) {
             return System.currentTimeMillis();

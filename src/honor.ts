@@ -1,6 +1,6 @@
 import type { Env, PushJob } from "./types";
 
-const DEFAULT_TOKEN_URL = "https://iam.developer.hihonor.com/auth/token";
+const DEFAULT_TOKEN_URL = "https://iam.developer.honor.com/auth/token";
 
 let cachedAccessToken: { token: string; expiresAt: number } | undefined;
 
@@ -8,32 +8,44 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
   const accessToken = await getAccessToken(env);
   const sendUrl =
     env.HONOR_SEND_URL?.replace("{appId}", env.HONOR_APP_ID) ??
-    `https://push-api.cloud.hihonor.com/v1/${env.HONOR_APP_ID}/messages:send`;
+    `https://push-api.cloud.honor.com/api/v1/${env.HONOR_APP_ID}/sendMessage`;
+  const messageId = job.messageId ?? crypto.randomUUID();
+  const data = {
+    ...(job.data ?? {}),
+    id: messageId,
+    title: job.title,
+    body: job.body,
+  };
 
   const response = await fetch(sendUrl, {
     method: "POST",
     headers: {
       authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
+      "content-type": "application/json; charset=UTF-8",
+      timestamp: String(Date.now()),
     },
     body: JSON.stringify({
-      validate_only: false,
-      message: {
-        token: [job.token],
-        notification: {
+      data,
+      androidConfig: {
+        androidNotification: {
           title: job.title,
           body: job.body,
-        },
-        data: job.data ? JSON.stringify(job.data) : undefined,
-        android: {
-          notification: {
-            foreground_show: true,
-            click_action: {
-              type: 3,
-            },
+          channelId: "notify_messages_alerts",
+          importance: "NORMAL",
+          defaultSound: true,
+          useDefaultVibrate: true,
+          useDefaultLight: true,
+          visibility: "PUBLIC",
+          foregroundShow: true,
+          style: 1,
+          bigTitle: job.title,
+          bigBody: job.body,
+          clickAction: {
+            type: 3,
           },
         },
       },
+      token: [job.token],
     }),
   });
 
