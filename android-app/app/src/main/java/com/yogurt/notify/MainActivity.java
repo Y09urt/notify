@@ -694,6 +694,15 @@ public class MainActivity extends Activity {
         targetInput.setText(settings.userId());
         layout.addView(targetInput);
 
+        Button chooseUser = new Button(this);
+        chooseUser.setText("选择已有用户");
+        styleButton(chooseUser, 0xFFFFFFFF, COLOR_PRIMARY);
+        chooseUser.setOnClickListener(v -> chooseUserForInput(targetInput));
+        layout.addView(chooseUser, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44)
+        ));
+
         EditText bodyInput = new EditText(this);
         bodyInput.setHint("消息内容");
         bodyInput.setMinLines(3);
@@ -762,6 +771,37 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    private void chooseUserForInput(EditText targetInput) {
+        setStatus("正在读取用户列表...");
+        executor.execute(() -> {
+            try {
+                List<WorkerApi.UserAccount> users = api.fetchUsers();
+                runOnUiThread(() -> showUserPicker(users, targetInput));
+            } catch (Exception error) {
+                Log.e(TAG, "Fetch users failed", error);
+                runOnUiThread(() -> setStatus("读取用户列表失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showUserPicker(List<WorkerApi.UserAccount> users, EditText targetInput) {
+        if (users.isEmpty()) {
+            setStatus("还没有用户");
+            return;
+        }
+        String[] labels = new String[users.size()];
+        for (int i = 0; i < users.size(); i++) {
+            WorkerApi.UserAccount user = users.get(i);
+            labels[i] = user.groups.isEmpty()
+                    ? user.id + " (暂无用户组)"
+                    : user.id + " - " + TextUtils.join(", ", user.groups);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("选择用户")
+                .setItems(labels, (dialog, which) -> targetInput.setText(users.get(which).id))
+                .show();
+    }
+
     private void sendMessage(AlertDialog dialog, String targetUserId, String groupId, String title, String body) {
         setStatus("正在发送消息...");
         executor.execute(() -> {
@@ -821,6 +861,15 @@ public class MainActivity extends Activity {
         memberInput.setHint("成员账号 ID");
         memberInput.setSingleLine(true);
         layout.addView(memberInput);
+
+        Button chooseMember = new Button(this);
+        chooseMember.setText("选择已有用户");
+        styleButton(chooseMember, 0xFFFFFFFF, COLOR_PRIMARY);
+        chooseMember.setOnClickListener(v -> chooseUserForInput(memberInput));
+        layout.addView(chooseMember, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44)
+        ));
         membersView.setPadding(0, dp(12), 0, 0);
         layout.addView(membersView);
 

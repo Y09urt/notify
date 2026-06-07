@@ -77,6 +77,16 @@ public final class WorkerApi {
         }
     }
 
+    public static final class UserAccount {
+        public final String id;
+        public final List<String> groups;
+
+        public UserAccount(String id, List<String> groups) {
+            this.id = id;
+            this.groups = groups;
+        }
+    }
+
     public WorkerApi(SettingsStore settings) {
         workerBaseUrl = settings.workerUrl();
         userId = settings.userId();
@@ -156,6 +166,28 @@ public final class WorkerApi {
             members.add(rows.optString(i));
         }
         return members;
+    }
+
+    public List<UserAccount> fetchUsers() throws Exception {
+        String response = request("GET", "/users", null);
+        JSONObject payload = new JSONObject(response);
+        JSONArray rows = payload.optJSONArray("users");
+        ArrayList<UserAccount> users = new ArrayList<>();
+        if (rows == null) {
+            return users;
+        }
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            ArrayList<String> groups = new ArrayList<>();
+            JSONArray groupRows = row.optJSONArray("groups");
+            if (groupRows != null) {
+                for (int groupIndex = 0; groupIndex < groupRows.length(); groupIndex++) {
+                    groups.add(groupRows.optString(groupIndex));
+                }
+            }
+            users.add(new UserAccount(row.optString("id"), groups));
+        }
+        return users;
     }
 
     private List<UserGroup> parseGroups(JSONArray rows) throws Exception {

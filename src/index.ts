@@ -19,6 +19,7 @@ import type {
   RegisterRequest,
   UserGroupMemberRow,
   UserGroupRow,
+  UserListRow,
 } from "./types";
 
 export default {
@@ -75,6 +76,10 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/groups/members") {
         return await updateGroupMember(request, env);
+      }
+
+      if (request.method === "GET" && url.pathname === "/users") {
+        return await listUsers(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/register") {
@@ -373,6 +378,28 @@ async function updateGroupMember(request: Request, env: Env): Promise<Response> 
     .run();
 
   return json({ ok: true });
+}
+
+async function listUsers(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  await requireAdmin(env, auth.userId);
+  const result = await env.DB.prepare(
+    `SELECT users.id,
+       GROUP_CONCAT(groups.name || ' (' || groups.id || ')', ', ') AS groups
+     FROM users
+     LEFT JOIN user_group_members members ON members.user_id = users.id
+     LEFT JOIN user_groups groups ON groups.id = members.group_id
+     GROUP BY users.id
+     ORDER BY users.id`,
+  ).all<UserListRow>();
+
+  return json({
+    ok: true,
+    users: (result.results ?? []).map((row) => ({
+      id: row.id,
+      groups: row.groups ? row.groups.split(", ") : [],
+    })),
+  });
 }
 
 async function requireAdmin(env: Env, userId: string): Promise<void> {

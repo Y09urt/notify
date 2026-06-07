@@ -84,3 +84,8 @@ export interface UserGroupRow {
 export interface UserGroupMemberRow {
   user_id: string;
 }
+
+export interface UserListRow {
+  id: string;
+  groups: string | null;
+}
