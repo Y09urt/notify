@@ -10,7 +10,7 @@ head_sampling_rate = 1
 [vars]
 # Non-sensitive defaults are deployed automatically when Cloudflare builds from GitHub.
 HONOR_APP_ID = "104567925"
-HONOR_CLIENT_ID = "104567925"
+HONOR_CLIENT_ID = "71a1eb62f3034d1db87fc1c4af57574d"
 HONOR_SEND_URL = "https://push-api.cloud.honor.com/api/v1/{appId}/sendMessage"
 HONOR_TOKEN_URL = "https://iam.developer.honor.com/auth/token"
 APP_DEBUG_LATEST_VERSION_CODE = "1"
