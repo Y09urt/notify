@@ -9,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URLEncoder;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -155,7 +156,8 @@ public final class WorkerApi {
     }
 
     public List<String> fetchGroupMembers(String groupId) throws Exception {
-        String response = request("GET", "/groups/members?groupId=" + groupId, null);
+        String encodedGroupId = URLEncoder.encode(groupId, StandardCharsets.UTF_8.name());
+        String response = request("GET", "/groups/members?groupId=" + encodedGroupId, null);
         JSONObject payload = new JSONObject(response);
         JSONArray rows = payload.optJSONArray("members");
         ArrayList<String> members = new ArrayList<>();
