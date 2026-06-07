@@ -24,6 +24,10 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
         notification: {
           title: job.title,
           body: job.body,
+          importance: "NORMAL",
+          useDefaultVibrate: true,
+          useDefaultLight: true,
+          visibility: "PUBLIC",
           foregroundShow: true,
           clickAction: {
             type: 3,
