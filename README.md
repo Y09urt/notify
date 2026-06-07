@@ -74,7 +74,7 @@ Worker 会自动把 `{appId}` 替换成 `HONOR_APP_ID`。
 
 远程更新检查区分 Debug 版和正式版。Debug APK 会请求 `channel=debug`，正式 APK 会请求 `channel=release`。
 
-这些远程更新变量已经写在 `wrangler.toml` 的 `[vars]` 里，Cloudflare 从 GitHub clone 部署后会自动配置默认值。以后只需要改 `wrangler.toml` 并 push，就能更新非敏感配置。
+这些远程更新变量的默认值已经写在 `wrangler.toml` 的 `[vars]` 里，Cloudflare 从 GitHub clone 部署后会自动配置默认值。账号白名单、管理员白名单和敏感凭据不要写进 `wrangler.toml`，避免每次部署覆盖 Cloudflare 后台里的真实值。
 
 Debug 版使用这些 Worker 变量：
 
@@ -94,6 +94,8 @@ yogurt,tester1,tester2
 
 如果不配置或为空，Debug 更新接口会拒绝返回下载地址。
 
+这个变量不要写进 `wrangler.toml`，请在 Cloudflare 后台 Variables/Secrets 里维护。
+
 管理员功能使用这些 Worker 变量：
 
 ```bash
@@ -107,6 +109,8 @@ yogurt
 ```
 
 它用于第一次进入 App 后创建和维护用户组。后续管理员权限跟随用户组：用户属于带管理员权限的用户组时，App 才会显示发送消息和用户组管理功能。
+
+这个变量不要写进 `wrangler.toml`，请在 Cloudflare 后台 Variables/Secrets 里维护。
 
 正式版使用这些 Worker 变量：
 
