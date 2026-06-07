@@ -10,7 +10,6 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
   const sendUrl =
     env.HONOR_SEND_URL?.trim().replace("{appId}", appId) ??
     `https://push-api.cloud.honor.com/api/v1/${appId}/sendMessage`;
-  const messageId = job.messageId ?? crypto.randomUUID();
 
   const response = await fetch(sendUrl, {
     method: "POST",
@@ -51,16 +50,6 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
     message?: string;
     msg?: string;
   };
-
-  console.log(
-    "honor push response",
-    JSON.stringify({
-      messageId,
-      tokenId: job.tokenId,
-      status: response.status,
-      payload: sanitizeHonorPayload(payload),
-    }),
-  );
 
   if (payload.code != null && !isHonorSuccessCode(payload.code)) {
     throw new Error(
@@ -138,28 +127,6 @@ function parseHonorResponse(text: string): unknown {
   } catch {
     return { raw: trimmed.slice(0, 500) };
   }
-}
-
-function sanitizeHonorPayload(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sanitizeHonorPayload);
-  }
-  if (!value || typeof value !== "object") {
-    return value;
-  }
-
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    const lower = key.toLowerCase();
-    if (lower.includes("token")) {
-      sanitized[key] = Array.isArray(child)
-        ? `[${child.length} token(s)]`
-        : "[token]";
-    } else {
-      sanitized[key] = sanitizeHonorPayload(child);
-    }
-  }
-  return sanitized;
 }
 
 function honorFailureSignal(value: unknown, path = "response"): string | undefined {
