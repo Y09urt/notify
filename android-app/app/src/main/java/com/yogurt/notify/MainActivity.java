@@ -79,6 +79,14 @@ public class MainActivity extends Activity {
         }
     }
 
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        saveLaunchMessage();
+        refreshLocal();
+    }
+
     private void buildUi() {
         FrameLayout screen = new FrameLayout(this);
 
@@ -1187,12 +1195,12 @@ public class MainActivity extends Activity {
     }
 
     private void saveLaunchMessage() {
-        String title = getIntent().getStringExtra("message_title");
-        String body = getIntent().getStringExtra("message_body");
+        String title = firstExtra("message_title", "title");
+        String body = firstExtra("message_body", "body");
         if (title == null || body == null) {
             return;
         }
-        String id = getIntent().getStringExtra("message_id");
+        String id = firstExtra("message_id", "id");
         if (id == null) {
             id = "launch-" + System.currentTimeMillis();
         }
@@ -1200,9 +1208,17 @@ public class MainActivity extends Activity {
                 id,
                 title,
                 body,
-                getIntent().getStringExtra("message_data"),
+                firstExtra("message_data", "data"),
                 System.currentTimeMillis()
         ));
+    }
+
+    private String firstExtra(String primary, String fallback) {
+        String value = getIntent().getStringExtra(primary);
+        if (value != null) {
+            return value;
+        }
+        return getIntent().getStringExtra(fallback);
     }
 
     private void setStatus(String text) {
