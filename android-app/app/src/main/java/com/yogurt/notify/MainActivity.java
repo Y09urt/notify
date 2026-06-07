@@ -346,6 +346,13 @@ public class MainActivity extends Activity {
             @Override
             public void onError(String message) {
                 Log.e(TAG, "Message channel preparation failed: " + message);
+                setStatus("消息通道准备失败: " + message);
+            }
+
+            @Override
+            public void onInfo(String message) {
+                Log.i(TAG, "Message channel info: " + message);
+                setStatus(message);
             }
         });
     }

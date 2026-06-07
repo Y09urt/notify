@@ -27,10 +27,13 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
     },
     body: JSON.stringify({
       data,
+      notification: {
+        title: job.title,
+        body: job.body,
+      },
       android: {
+        data,
         notification: {
-          title: job.title,
-          body: job.body,
           foregroundShow: true,
           clickAction: {
             type: 3,
@@ -44,21 +47,36 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
     }),
   });
 
+  const detail = await response.text();
   if (!response.ok) {
-    const detail = await response.text();
     throw new Error(`HONOR push request failed: ${response.status} ${detail}`);
   }
 
-  const payload = (await response.json().catch(() => ({}))) as {
+  const payload = parseHonorResponse(detail) as {
     code?: string | number;
     message?: string;
     msg?: string;
   };
 
+  console.log(
+    "honor push response",
+    JSON.stringify({
+      messageId,
+      tokenId: job.tokenId,
+      status: response.status,
+      payload: sanitizeHonorPayload(payload),
+    }),
+  );
+
   if (payload.code != null && !isHonorSuccessCode(payload.code)) {
     throw new Error(
       `HONOR push request failed: ${payload.code} ${payload.message ?? payload.msg ?? ""}`,
     );
+  }
+
+  const failureSignal = honorFailureSignal(payload);
+  if (failureSignal) {
+    throw new Error(`HONOR push request failed: ${failureSignal}`);
   }
 }
 
@@ -114,4 +132,82 @@ function envValue(value: string | undefined, name: string): string {
 function isHonorSuccessCode(code: string | number): boolean {
   const text = String(code);
   return text === "200" || text === "80000000" || text === "0";
+}
+
+function parseHonorResponse(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return {};
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return { raw: trimmed.slice(0, 500) };
+  }
+}
+
+function sanitizeHonorPayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeHonorPayload);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    const lower = key.toLowerCase();
+    if (lower.includes("token")) {
+      sanitized[key] = Array.isArray(child)
+        ? `[${child.length} token(s)]`
+        : "[token]";
+    } else {
+      sanitized[key] = sanitizeHonorPayload(child);
+    }
+  }
+  return sanitized;
+}
+
+function honorFailureSignal(value: unknown, path = "response"): string | undefined {
+  if (Array.isArray(value)) {
+    if (value.length > 0 && hasFailureName(path)) {
+      return `${path} has ${value.length} item(s)`;
+    }
+    for (let i = 0; i < value.length; i += 1) {
+      const child = honorFailureSignal(value[i], `${path}[${i}]`);
+      if (child) {
+        return child;
+      }
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = `${path}.${key}`;
+    if (typeof child === "number" && child > 0 && hasFailureName(key)) {
+      return `${childPath}=${child}`;
+    }
+    if (typeof child === "string" && child.trim() && hasFailureName(key)) {
+      return `${childPath}=${child.trim().slice(0, 200)}`;
+    }
+    const nested = honorFailureSignal(child, childPath);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return undefined;
+}
+
+function hasFailureName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower.includes("fail") ||
+    lower.includes("invalid") ||
+    lower.includes("illegal") ||
+    lower.includes("error")
+  );
 }
