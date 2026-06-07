@@ -670,18 +670,6 @@ public class MainActivity extends Activity {
                 dp(44)
         ));
 
-        Button clearGroup = new Button(this);
-        clearGroup.setText("改发单个账号");
-        styleButton(clearGroup, 0xFFFFFFFF, COLOR_TEXT);
-        clearGroup.setOnClickListener(v -> {
-            selectedGroupId[0] = "";
-            targetLabel.setText("发送到单个账号");
-        });
-        layout.addView(clearGroup, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(44)
-        ));
-
         EditText titleInput = new EditText(this);
         titleInput.setHint("标题");
         titleInput.setSingleLine(true);
@@ -695,9 +683,9 @@ public class MainActivity extends Activity {
         layout.addView(targetInput);
 
         Button chooseUser = new Button(this);
-        chooseUser.setText("选择已有用户");
+        chooseUser.setText("选择用户");
         styleButton(chooseUser, 0xFFFFFFFF, COLOR_PRIMARY);
-        chooseUser.setOnClickListener(v -> chooseUserForInput(targetInput));
+        chooseUser.setOnClickListener(v -> chooseUserForMessage(targetInput, selectedGroupId, targetLabel));
         layout.addView(chooseUser, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(44)
@@ -783,6 +771,48 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> setStatus("读取用户列表失败: " + error.getMessage()));
             }
         });
+    }
+
+    private void chooseUserForMessage(EditText targetInput, String[] selectedGroupId, TextView targetLabel) {
+        setStatus("正在读取用户列表...");
+        executor.execute(() -> {
+            try {
+                List<WorkerApi.UserAccount> users = api.fetchUsers();
+                runOnUiThread(() -> showMessageUserPicker(users, targetInput, selectedGroupId, targetLabel));
+            } catch (Exception error) {
+                Log.e(TAG, "Fetch users failed", error);
+                runOnUiThread(() -> setStatus("读取用户列表失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showMessageUserPicker(
+            List<WorkerApi.UserAccount> users,
+            EditText targetInput,
+            String[] selectedGroupId,
+            TextView targetLabel
+    ) {
+        if (users.isEmpty()) {
+            setStatus("还没有用户");
+            return;
+        }
+        setStatus("用户列表已读取");
+        String[] labels = new String[users.size()];
+        for (int i = 0; i < users.size(); i++) {
+            WorkerApi.UserAccount user = users.get(i);
+            labels[i] = user.groups.isEmpty()
+                    ? user.id + " (暂无用户组)"
+                    : user.id + " - " + TextUtils.join(", ", user.groups);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("选择用户")
+                .setItems(labels, (dialog, which) -> {
+                    WorkerApi.UserAccount user = users.get(which);
+                    selectedGroupId[0] = "";
+                    targetInput.setText(user.id);
+                    targetLabel.setText("发送到用户: " + user.id);
+                })
+                .show();
     }
 
     private void showUserPicker(List<WorkerApi.UserAccount> users, EditText targetInput) {
