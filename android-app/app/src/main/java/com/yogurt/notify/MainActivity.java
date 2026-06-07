@@ -756,6 +756,7 @@ public class MainActivity extends Activity {
             setStatus("还没有用户组");
             return;
         }
+        setStatus("用户组已读取");
         String[] labels = new String[groups.size()];
         for (int i = 0; i < groups.size(); i++) {
             WorkerApi.UserGroup group = groups.get(i);
@@ -789,6 +790,7 @@ public class MainActivity extends Activity {
             setStatus("还没有用户");
             return;
         }
+        setStatus("用户列表已读取");
         String[] labels = new String[users.size()];
         for (int i = 0; i < users.size(); i++) {
             WorkerApi.UserAccount user = users.get(i);
@@ -922,6 +924,7 @@ public class MainActivity extends Activity {
             setStatus("还没有用户组");
             return;
         }
+        setStatus("用户组已读取");
         String[] labels = new String[groups.size()];
         for (int i = 0; i < groups.size(); i++) {
             WorkerApi.UserGroup group = groups.get(i);
