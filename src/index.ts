@@ -1,6 +1,7 @@
 import {
   authenticate,
   currentUser,
+  isAdminUser,
   loginUser,
   logoutUser,
   registerUser,
@@ -9,11 +10,15 @@ import { sendHonor } from "./honor";
 import { empty, HttpError, isAdmin, isHttpError, json, readJson } from "./http";
 import type {
   Env,
+  GroupMemberRequest,
+  GroupRequest,
   PushJob,
   PushMessageRow,
   PushRequest,
   PushTokenRow,
   RegisterRequest,
+  UserGroupMemberRow,
+  UserGroupRow,
 } from "./types";
 
 export default {
@@ -50,6 +55,22 @@ export default {
 
       if (request.method === "GET" && url.pathname === "/messages") {
         return await listMessages(request, url, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/messages") {
+        return await sendMessage(request, env);
+      }
+
+      if (request.method === "GET" && url.pathname === "/groups") {
+        return await listGroups(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/groups") {
+        return await saveGroup(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/groups/members") {
+        return await updateGroupMember(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/register") {
@@ -210,28 +231,170 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   }
 
   if (userId) {
-    const result = await env.DB.prepare(
-      "SELECT id, token FROM push_tokens WHERE user_id = ? AND platform = 'honor'",
-    )
-      .bind(userId)
-      .all<PushTokenRow>();
-
-    for (const row of result.results ?? []) {
-      jobs.push({ tokenId: row.id, platform, token: row.token, title, body: messageBody, data });
-    }
-  }
-
-  if (userId) {
-    await env.DB.prepare(
-      `INSERT INTO push_messages (id, user_id, title, body, data)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-      .bind(crypto.randomUUID(), userId, title, messageBody, data ? JSON.stringify(data) : null)
-      .run();
+    jobs.push(...(await jobsForUser(env, userId, title, messageBody, data)));
+    await saveMessage(env, userId, title, messageBody, data);
   }
 
   await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
   return json({ ok: true, queued: jobs.length }, 202);
+}
+
+async function sendMessage(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  await requireAdmin(env, auth.userId);
+  const body = await readJson<PushRequest>(request);
+  const title = requiredString(body.title, "title");
+  const messageBody = requiredString(body.body, "body");
+  const data = normalizeData(body.data);
+  const targetUserId = optionalString(body.userId);
+  const targetGroupId = optionalString(body.groupId);
+
+  if (!targetUserId && !targetGroupId) {
+    throw new HttpError(400, "userId or groupId is required");
+  }
+  if (targetUserId && targetGroupId) {
+    throw new HttpError(400, "send to either userId or groupId");
+  }
+
+  const targetUserIds = targetGroupId
+    ? await userIdsForGroup(env, targetGroupId)
+    : [normalizeUserId(targetUserId)];
+  const jobs: PushJob[] = [];
+  for (const userId of targetUserIds) {
+    jobs.push(...(await jobsForUser(env, userId, title, messageBody, data)));
+    await saveMessage(env, userId, title, messageBody, data);
+  }
+  await Promise.all(jobs.map((job) => env.PUSH_QUEUE.send(job)));
+  return json({ ok: true, queued: jobs.length, recipients: targetUserIds.length }, 202);
+}
+
+async function listGroups(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  await requireAdmin(env, auth.userId);
+  const result = await env.DB.prepare(
+    `SELECT groups.id, groups.name, groups.is_admin, COUNT(members.user_id) AS member_count
+     FROM user_groups groups
+     LEFT JOIN user_group_members members ON members.group_id = groups.id
+     GROUP BY groups.id, groups.name, groups.is_admin
+     ORDER BY groups.name`,
+  ).all<UserGroupRow>();
+
+  return json({
+    ok: true,
+    groups: (result.results ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      isAdmin: row.is_admin === 1,
+      memberCount: row.member_count,
+    })),
+  });
+}
+
+async function saveGroup(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  await requireAdmin(env, auth.userId);
+  const body = await readJson<GroupRequest>(request);
+  const id = normalizeGroupId(body.id);
+  const name = requiredString(body.name, "name");
+  const isAdmin = body.isAdmin === true;
+
+  await env.DB.prepare(
+    `INSERT INTO user_groups (id, name, is_admin)
+     VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       is_admin = excluded.is_admin`,
+  )
+    .bind(id, name, isAdmin ? 1 : 0)
+    .run();
+
+  return json({ ok: true, group: { id, name, isAdmin } });
+}
+
+async function updateGroupMember(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  await requireAdmin(env, auth.userId);
+  const body = await readJson<GroupMemberRequest>(request);
+  const groupId = normalizeGroupId(body.groupId);
+  const userId = normalizeUserId(requiredString(body.userId, "userId"));
+  const action = optionalString(body.action) ?? "add";
+
+  if (action === "remove") {
+    await env.DB.prepare("DELETE FROM user_group_members WHERE group_id = ? AND user_id = ?")
+      .bind(groupId, userId)
+      .run();
+    return json({ ok: true });
+  }
+
+  const group = await env.DB.prepare("SELECT id FROM user_groups WHERE id = ?")
+    .bind(groupId)
+    .first();
+  if (!group) {
+    throw new HttpError(404, "group not found");
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO user_group_members (group_id, user_id)
+     VALUES (?, ?)
+     ON CONFLICT(group_id, user_id) DO NOTHING`,
+  )
+    .bind(groupId, userId)
+    .run();
+
+  return json({ ok: true });
+}
+
+async function requireAdmin(env: Env, userId: string): Promise<void> {
+  if (!(await isAdminUser(env, userId))) {
+    throw new HttpError(403, "admin permission required");
+  }
+}
+
+async function jobsForUser(
+  env: Env,
+  userId: string,
+  title: string,
+  messageBody: string,
+  data: Record<string, string> | undefined,
+): Promise<PushJob[]> {
+  const result = await env.DB.prepare(
+    "SELECT id, token FROM push_tokens WHERE user_id = ? AND platform = 'honor'",
+  )
+    .bind(userId)
+    .all<PushTokenRow>();
+
+  return (result.results ?? []).map((row) => ({
+    tokenId: row.id,
+    platform: "honor",
+    token: row.token,
+    title,
+    body: messageBody,
+    data,
+  }));
+}
+
+async function saveMessage(
+  env: Env,
+  userId: string,
+  title: string,
+  messageBody: string,
+  data: Record<string, string> | undefined,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO push_messages (id, user_id, title, body, data)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(crypto.randomUUID(), userId, title, messageBody, data ? JSON.stringify(data) : null)
+    .run();
+}
+
+async function userIdsForGroup(env: Env, groupId: string): Promise<string[]> {
+  const result = await env.DB.prepare(
+    "SELECT user_id FROM user_group_members WHERE group_id = ? ORDER BY user_id",
+  )
+    .bind(normalizeGroupId(groupId))
+    .all<UserGroupMemberRow>();
+  return (result.results ?? []).map((row) => row.user_id);
 }
 
 async function listMessages(request: Request, url: URL, env: Env): Promise<Response> {
@@ -265,6 +428,22 @@ function requiredString(value: unknown, fieldName: string): string {
   const text = optionalString(value);
   if (!text) {
     throw new HttpError(400, `${fieldName} is required`);
+  }
+  return text;
+}
+
+function normalizeUserId(value: string | undefined): string {
+  const text = requiredString(value, "userId").toLowerCase();
+  if (!/^[a-z0-9_.-]{3,32}$/.test(text)) {
+    throw new HttpError(400, "userId must be 3-32 chars: a-z, 0-9, _, . or -");
+  }
+  return text;
+}
+
+function normalizeGroupId(value: unknown): string {
+  const text = requiredString(value, "groupId").toLowerCase();
+  if (!/^[a-z0-9_.-]{2,32}$/.test(text)) {
+    throw new HttpError(400, "groupId must be 2-32 chars: a-z, 0-9, _, . or -");
   }
   return text;
 }

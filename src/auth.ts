@@ -43,7 +43,7 @@ export async function registerUser(request: Request, env: Env): Promise<Response
     .run();
 
   const sessionToken = await createSession(env, id);
-  return json({ ok: true, userId: id, sessionToken }, 201);
+  return json({ ok: true, userId: id, sessionToken, isAdmin: await isAdminUser(env, id) }, 201);
 }
 
 export async function loginUser(request: Request, env: Env): Promise<Response> {
@@ -57,12 +57,12 @@ export async function loginUser(request: Request, env: Env): Promise<Response> {
   }
 
   const sessionToken = await createSession(env, id);
-  return json({ ok: true, userId: id, sessionToken });
+  return json({ ok: true, userId: id, sessionToken, isAdmin: await isAdminUser(env, id) });
 }
 
 export async function currentUser(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
-  return json({ ok: true, userId: auth.userId });
+  return json({ ok: true, userId: auth.userId, isAdmin: await isAdminUser(env, auth.userId) });
 }
 
 export async function logoutUser(request: Request, env: Env): Promise<Response> {
@@ -97,6 +97,24 @@ export async function authenticate(request: Request, env: Env): Promise<AuthUser
   return { sessionId: session.id, userId: session.user_id };
 }
 
+export async function isAdminUser(env: Env, userId: string): Promise<boolean> {
+  await ensureAuthSchema(env);
+  if (isBootstrapAdmin(userId, env.APP_ADMIN_IDS)) {
+    return true;
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT 1
+     FROM user_group_members members
+     JOIN user_groups groups ON groups.id = members.group_id
+     WHERE members.user_id = ? AND groups.is_admin = 1
+     LIMIT 1`,
+  )
+    .bind(userId)
+    .first();
+  return Boolean(row);
+}
+
 function ensureAuthSchema(env: Env): Promise<void> {
   authSchemaReady ??= createAuthSchema(env);
   return authSchemaReady;
@@ -120,11 +138,34 @@ async function createAuthSchema(env: Env): Promise<void> {
     )`,
     "CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)",
+    `CREATE TABLE IF NOT EXISTS user_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS user_group_members (
+      group_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (group_id, user_id),
+      FOREIGN KEY (group_id) REFERENCES user_groups(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_user_group_members_user_id ON user_group_members(user_id)",
   ];
 
   for (const statement of statements) {
     await env.DB.prepare(statement).run();
   }
+}
+
+function isBootstrapAdmin(userId: string, adminIds: string | undefined): boolean {
+  return (adminIds ?? "")
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(userId.toLowerCase());
 }
 
 async function readAuthBody(request: Request): Promise<{ id: string; password: string }> {

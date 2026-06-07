@@ -16,6 +16,7 @@ export interface Env {
   APP_DEBUG_DOWNLOAD_URL?: string;
   APP_DEBUG_RELEASE_NOTES?: string;
   APP_DEBUG_ALLOWED_IDS?: string;
+  APP_ADMIN_IDS?: string;
   APP_RELEASE_LATEST_VERSION_CODE?: string;
   APP_RELEASE_LATEST_VERSION_NAME?: string;
   APP_RELEASE_DOWNLOAD_URL?: string;
@@ -40,10 +41,23 @@ export interface RegisterRequest {
 export interface PushRequest {
   token?: unknown;
   userId?: unknown;
+  groupId?: unknown;
   platform?: unknown;
   title?: unknown;
   body?: unknown;
   data?: unknown;
+}
+
+export interface GroupRequest {
+  id?: unknown;
+  name?: unknown;
+  isAdmin?: unknown;
+}
+
+export interface GroupMemberRequest {
+  groupId?: unknown;
+  userId?: unknown;
+  action?: unknown;
 }
 
 export interface PushTokenRow {
@@ -58,4 +72,15 @@ export interface PushMessageRow {
   body: string;
   data: string | null;
   created_at: string;
+}
+
+export interface UserGroupRow {
+  id: string;
+  name: string;
+  is_admin: number;
+  member_count: number;
+}
+
+export interface UserGroupMemberRow {
+  user_id: string;
 }

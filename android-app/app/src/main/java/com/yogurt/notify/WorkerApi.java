@@ -26,10 +26,22 @@ public final class WorkerApi {
     public static final class AuthSession {
         public final String userId;
         public final String sessionToken;
+        public final boolean isAdmin;
 
-        public AuthSession(String userId, String sessionToken) {
+        public AuthSession(String userId, String sessionToken, boolean isAdmin) {
             this.userId = userId;
             this.sessionToken = sessionToken;
+            this.isAdmin = isAdmin;
+        }
+    }
+
+    public static final class UserInfo {
+        public final String userId;
+        public final boolean isAdmin;
+
+        public UserInfo(String userId, boolean isAdmin) {
+            this.userId = userId;
+            this.isAdmin = isAdmin;
         }
     }
 
@@ -49,6 +61,20 @@ public final class WorkerApi {
         }
     }
 
+    public static final class UserGroup {
+        public final String id;
+        public final String name;
+        public final boolean isAdmin;
+        public final int memberCount;
+
+        public UserGroup(String id, String name, boolean isAdmin, int memberCount) {
+            this.id = id;
+            this.name = name;
+            this.isAdmin = isAdmin;
+            this.memberCount = memberCount;
+        }
+    }
+
     public WorkerApi(SettingsStore settings) {
         workerBaseUrl = settings.workerUrl();
         userId = settings.userId();
@@ -63,10 +89,10 @@ public final class WorkerApi {
         return authRequest("/auth/login", id, password);
     }
 
-    public String checkSession() throws Exception {
+    public UserInfo checkSession() throws Exception {
         String response = request("GET", "/auth/me", null);
         JSONObject payload = new JSONObject(response);
-        return payload.optString("userId");
+        return new UserInfo(payload.optString("userId"), payload.optBoolean("isAdmin", false));
     }
 
     public void logout() throws Exception {
@@ -91,6 +117,55 @@ public final class WorkerApi {
         payload.put("platform", "honor");
         payload.put("token", token);
         request("POST", "/register", payload.toString());
+    }
+
+    public void sendMessage(String targetUserId, String groupId, String title, String body) throws Exception {
+        JSONObject payload = new JSONObject();
+        if (targetUserId != null && !targetUserId.trim().isEmpty()) {
+            payload.put("userId", targetUserId);
+        }
+        if (groupId != null && !groupId.trim().isEmpty()) {
+            payload.put("groupId", groupId);
+        }
+        payload.put("title", title);
+        payload.put("body", body);
+        request("POST", "/messages", payload.toString());
+    }
+
+    public List<UserGroup> fetchGroups() throws Exception {
+        String response = request("GET", "/groups", null);
+        JSONObject payload = new JSONObject(response);
+        JSONArray rows = payload.optJSONArray("groups");
+        ArrayList<UserGroup> groups = new ArrayList<>();
+        if (rows == null) {
+            return groups;
+        }
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            groups.add(new UserGroup(
+                    row.optString("id"),
+                    row.optString("name"),
+                    row.optBoolean("isAdmin", false),
+                    row.optInt("memberCount", 0)
+            ));
+        }
+        return groups;
+    }
+
+    public void saveGroup(String id, String name, boolean isAdmin) throws Exception {
+        JSONObject payload = new JSONObject();
+        payload.put("id", id);
+        payload.put("name", name);
+        payload.put("isAdmin", isAdmin);
+        request("POST", "/groups", payload.toString());
+    }
+
+    public void setGroupMember(String groupId, String userId, boolean add) throws Exception {
+        JSONObject payload = new JSONObject();
+        payload.put("groupId", groupId);
+        payload.put("userId", userId);
+        payload.put("action", add ? "add" : "remove");
+        request("POST", "/groups/members", payload.toString());
     }
 
     public List<NotifyMessage> fetchMessages() throws Exception {
@@ -126,7 +201,11 @@ public final class WorkerApi {
         payload.put("password", password);
         String response = request("POST", path, payload.toString());
         JSONObject body = new JSONObject(response);
-        return new AuthSession(body.optString("userId"), body.optString("sessionToken"));
+        return new AuthSession(
+                body.optString("userId"),
+                body.optString("sessionToken"),
+                body.optBoolean("isAdmin", false)
+        );
     }
 
     private String request(String method, String path, String body) throws Exception {

@@ -94,6 +94,20 @@ yogurt,tester1,tester2
 
 如果不配置或为空，Debug 更新接口会拒绝返回下载地址。
 
+管理员功能使用这些 Worker 变量：
+
+```bash
+npx wrangler secret put APP_ADMIN_IDS
+```
+
+`APP_ADMIN_IDS` 是初始管理员账号白名单，多个账号用英文逗号分隔，例如：
+
+```text
+yogurt
+```
+
+它用于第一次进入 App 后创建和维护用户组。后续管理员权限跟随用户组：用户属于带管理员权限的用户组时，App 才会显示发送消息和用户组管理功能。
+
 正式版使用这些 Worker 变量：
 
 ```bash

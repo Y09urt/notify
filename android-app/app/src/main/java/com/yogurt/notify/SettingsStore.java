@@ -9,6 +9,7 @@ public class SettingsStore {
     private static final String KEY_USER_ID = "user_id";
     private static final String KEY_LAST_TOKEN = "last_token";
     private static final String KEY_SESSION_TOKEN = "session_token";
+    private static final String KEY_IS_ADMIN = "is_admin";
 
     private final SharedPreferences prefs;
 
@@ -36,6 +37,10 @@ public class SettingsStore {
         return !sessionToken().isEmpty();
     }
 
+    public boolean isAdmin() {
+        return prefs.getBoolean(KEY_IS_ADMIN, false);
+    }
+
     public void setWorkerUrl(String value) {
         prefs.edit().putString(KEY_WORKER_URL, normalizeWorkerUrl(value)).apply();
     }
@@ -48,10 +53,11 @@ public class SettingsStore {
         prefs.edit().putString(KEY_LAST_TOKEN, value).apply();
     }
 
-    public void setSession(String userId, String sessionToken) {
+    public void setSession(String userId, String sessionToken, boolean isAdmin) {
         prefs.edit()
                 .putString(KEY_USER_ID, userId.trim())
                 .putString(KEY_SESSION_TOKEN, sessionToken)
+                .putBoolean(KEY_IS_ADMIN, isAdmin)
                 .apply();
     }
 
@@ -59,6 +65,7 @@ public class SettingsStore {
         prefs.edit()
                 .remove(KEY_SESSION_TOKEN)
                 .remove(KEY_USER_ID)
+                .remove(KEY_IS_ADMIN)
                 .apply();
     }
 

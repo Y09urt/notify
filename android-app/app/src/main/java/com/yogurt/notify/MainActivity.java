@@ -18,6 +18,7 @@ import android.view.Gravity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -55,6 +56,8 @@ public class MainActivity extends Activity {
     private TextView countView;
     private View drawerScrim;
     private LinearLayout drawerPanel;
+    private TextView sendMessageItem;
+    private TextView groupManagementItem;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,7 +95,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("荣耀 Push 消息中心");
+        subtitle.setText("Notify 消息中心");
         subtitle.setTextSize(14);
         subtitle.setTextColor(COLOR_MUTED);
         subtitle.setPadding(0, dp(2), 0, dp(14));
@@ -186,11 +189,12 @@ public class MainActivity extends Activity {
         setStatus("正在验证登录凭证...");
         executor.execute(() -> {
             try {
-                String userId = api.checkSession();
-                settings.setSession(userId, settings.sessionToken());
+                WorkerApi.UserInfo user = api.checkSession();
+                settings.setSession(user.userId, settings.sessionToken(), user.isAdmin);
                 api = new WorkerApi(settings);
                 runOnUiThread(() -> {
-                    setStatus("已登录: " + userId);
+                    updateAdminUi();
+                    setStatus("已登录: " + user.userId);
                     enterApp();
                 });
             } catch (Exception error) {
@@ -207,7 +211,7 @@ public class MainActivity extends Activity {
 
     private void enterApp() {
         fetchHistory();
-        requestPushToken();
+        prepareMessageChannel();
     }
 
     private void showLoginDialog() {
@@ -252,10 +256,11 @@ public class MainActivity extends Activity {
                 WorkerApi.AuthSession session = createAccount
                         ? api.registerAccount(id, password)
                         : api.login(id, password);
-                settings.setSession(session.userId, session.sessionToken);
+                settings.setSession(session.userId, session.sessionToken, session.isAdmin);
                 api = new WorkerApi(settings);
                 runOnUiThread(() -> {
                     dialog.dismiss();
+                    updateAdminUi();
                     setStatus(action + "成功: " + session.userId);
                     enterApp();
                 });
@@ -286,54 +291,29 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void requestPushToken() {
+    private void prepareMessageChannel() {
         if (!settings.hasSession()) {
             showLoginDialog();
             return;
         }
-        setStatus("正在请求荣耀 PushToken...");
         HonorPushRegistrar.requestToken(this, new HonorPushRegistrar.Callback() {
             @Override
             public void onToken(String token) {
-                Log.i(TAG, "PushToken received: " + shortToken(token));
+                Log.i(TAG, "Message channel token received: " + shortToken(token));
                 settings.setLastToken(token);
-                setStatus("PushToken 已获取，正在上传...");
                 executor.execute(() -> {
                     try {
                         api.registerToken(token);
-                        runOnUiThread(() -> setStatus("PushToken 已注册到 Worker"));
+                        runOnUiThread(() -> setStatus("消息通道已就绪"));
                     } catch (Exception error) {
-                        runOnUiThread(() -> setStatus("注册失败: " + error.getMessage()));
+                        Log.e(TAG, "Message channel registration failed", error);
                     }
                 });
             }
 
             @Override
             public void onError(String message) {
-                Log.e(TAG, "PushToken failed: " + message);
-                setStatus("PushToken 获取失败: " + message);
-            }
-        });
-    }
-
-    private void uploadLastToken() {
-        if (!settings.hasSession()) {
-            showLoginDialog();
-            return;
-        }
-        String token = settings.lastToken();
-        if (token.isEmpty()) {
-            setStatus("还没有可重传的 PushToken");
-            return;
-        }
-        setStatus("正在重传 PushToken...");
-        executor.execute(() -> {
-            try {
-                Log.i(TAG, "Uploading last PushToken");
-                api.registerToken(token);
-                runOnUiThread(() -> setStatus("PushToken 已重传"));
-            } catch (Exception error) {
-                runOnUiThread(() -> setStatus("重传失败: " + error.getMessage()));
+                Log.e(TAG, "Message channel preparation failed: " + message);
             }
         });
     }
@@ -371,7 +351,7 @@ public class MainActivity extends Activity {
         }
         if (messages.isEmpty()) {
             TextView empty = new TextView(this);
-            empty.setText("暂无消息\n收到荣耀 Push 后会显示在这里");
+            empty.setText("暂无消息\n收到新消息后会显示在这里");
             empty.setTextSize(15);
             empty.setGravity(Gravity.CENTER);
             empty.setTextColor(COLOR_MUTED);
@@ -518,14 +498,18 @@ public class MainActivity extends Activity {
         drawerPanel.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("荣耀 Push 管理");
+        subtitle.setText("消息与账户");
         subtitle.setTextSize(13);
         subtitle.setTextColor(COLOR_MUTED);
         subtitle.setPadding(0, dp(2), 0, dp(20));
         drawerPanel.addView(subtitle);
 
-        drawerPanel.addView(drawerItem("获取 PushToken", COLOR_SUCCESS, this::requestPushToken));
-        drawerPanel.addView(drawerItem("重传 PushToken", COLOR_TEXT, this::uploadLastToken));
+        sendMessageItem = drawerItem("发送消息", COLOR_SUCCESS, this::showSendMessageDialog);
+        sendMessageItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
+        drawerPanel.addView(sendMessageItem);
+        groupManagementItem = drawerItem("用户组管理", COLOR_PRIMARY, this::showGroupManagementDialog);
+        groupManagementItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
+        drawerPanel.addView(groupManagementItem);
         drawerPanel.addView(drawerItem("设置服务器", COLOR_PRIMARY, this::showSettingsDialog));
         drawerPanel.addView(drawerItem("检查更新", COLOR_PRIMARY, this::checkForUpdates));
         drawerPanel.addView(drawerItem("添加本地测试消息", COLOR_WARNING, this::addLocalTestMessage));
@@ -559,6 +543,15 @@ public class MainActivity extends Activity {
             action.run();
         });
         return item;
+    }
+
+    private void updateAdminUi() {
+        if (sendMessageItem != null) {
+            sendMessageItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
+        }
+        if (groupManagementItem != null) {
+            groupManagementItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void openDrawer() {
@@ -598,6 +591,241 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    private void showSendMessageDialog() {
+        if (!settings.hasSession()) {
+            showLoginDialog();
+            return;
+        }
+        if (!settings.isAdmin()) {
+            setStatus("当前账号没有发送权限");
+            return;
+        }
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(16);
+        layout.setPadding(padding, padding, padding, 0);
+
+        final String[] selectedGroupId = {""};
+        TextView targetLabel = new TextView(this);
+        targetLabel.setText("发送到单个账号");
+        targetLabel.setTextColor(COLOR_MUTED);
+        targetLabel.setPadding(0, 0, 0, dp(8));
+        layout.addView(targetLabel);
+
+        Button chooseGroup = new Button(this);
+        chooseGroup.setText("选择用户组");
+        styleButton(chooseGroup, 0xFFFFFFFF, COLOR_PRIMARY);
+        chooseGroup.setOnClickListener(v -> chooseGroupForMessage(selectedGroupId, targetLabel));
+        layout.addView(chooseGroup, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44)
+        ));
+
+        Button clearGroup = new Button(this);
+        clearGroup.setText("改发单个账号");
+        styleButton(clearGroup, 0xFFFFFFFF, COLOR_TEXT);
+        clearGroup.setOnClickListener(v -> {
+            selectedGroupId[0] = "";
+            targetLabel.setText("发送到单个账号");
+        });
+        layout.addView(clearGroup, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44)
+        ));
+
+        EditText titleInput = new EditText(this);
+        titleInput.setHint("标题");
+        titleInput.setSingleLine(true);
+        titleInput.setText("Notify");
+        layout.addView(titleInput);
+
+        EditText targetInput = new EditText(this);
+        targetInput.setHint("接收账号 ID，未选择用户组时必填");
+        targetInput.setSingleLine(true);
+        targetInput.setText(settings.userId());
+        layout.addView(targetInput);
+
+        EditText bodyInput = new EditText(this);
+        bodyInput.setHint("消息内容");
+        bodyInput.setMinLines(3);
+        bodyInput.setGravity(Gravity.TOP);
+        bodyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        layout.addView(bodyInput);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("发送消息")
+                .setView(layout)
+                .setPositiveButton("发送", null)
+                .setNegativeButton("取消", null)
+                .create();
+        dialog.setOnShowListener(view -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
+            String title = titleInput.getText().toString().trim();
+            String targetUserId = targetInput.getText().toString().trim();
+            String groupId = selectedGroupId[0];
+            String body = bodyInput.getText().toString().trim();
+            if (title.isEmpty()) {
+                titleInput.setError("请输入标题");
+                return;
+            }
+            if (groupId.isEmpty() && targetUserId.isEmpty()) {
+                targetInput.setError("请输入接收账号 ID");
+                return;
+            }
+            if (body.isEmpty()) {
+                bodyInput.setError("请输入消息内容");
+                return;
+            }
+            sendMessage(dialog, groupId.isEmpty() ? targetUserId : "", groupId, title, body);
+        }));
+        dialog.show();
+    }
+
+    private void chooseGroupForMessage(String[] selectedGroupId, TextView targetLabel) {
+        setStatus("正在读取用户组...");
+        executor.execute(() -> {
+            try {
+                List<WorkerApi.UserGroup> groups = api.fetchGroups();
+                runOnUiThread(() -> showGroupPicker(groups, selectedGroupId, targetLabel));
+            } catch (Exception error) {
+                Log.e(TAG, "Fetch groups failed", error);
+                runOnUiThread(() -> setStatus("读取用户组失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showGroupPicker(List<WorkerApi.UserGroup> groups, String[] selectedGroupId, TextView targetLabel) {
+        if (groups.isEmpty()) {
+            setStatus("还没有用户组");
+            return;
+        }
+        String[] labels = new String[groups.size()];
+        for (int i = 0; i < groups.size(); i++) {
+            WorkerApi.UserGroup group = groups.get(i);
+            labels[i] = group.name + " (" + group.id + ", " + group.memberCount + " 人)";
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("选择用户组")
+                .setItems(labels, (dialog, which) -> {
+                    WorkerApi.UserGroup group = groups.get(which);
+                    selectedGroupId[0] = group.id;
+                    targetLabel.setText("发送到用户组: " + group.name + " (" + group.id + ")");
+                })
+                .show();
+    }
+
+    private void sendMessage(AlertDialog dialog, String targetUserId, String groupId, String title, String body) {
+        setStatus("正在发送消息...");
+        executor.execute(() -> {
+            try {
+                api.sendMessage(targetUserId, groupId, title, body);
+                runOnUiThread(() -> {
+                    dialog.dismiss();
+                    setStatus("消息已发送");
+                    fetchHistory();
+                });
+            } catch (Exception error) {
+                Log.e(TAG, "Send message failed", error);
+                runOnUiThread(() -> setStatus("发送失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void showGroupManagementDialog() {
+        if (!settings.isAdmin()) {
+            setStatus("当前账号没有管理权限");
+            return;
+        }
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(16);
+        layout.setPadding(padding, padding, padding, 0);
+
+        EditText groupIdInput = new EditText(this);
+        groupIdInput.setHint("用户组 ID，例如 admins");
+        groupIdInput.setSingleLine(true);
+        layout.addView(groupIdInput);
+
+        EditText groupNameInput = new EditText(this);
+        groupNameInput.setHint("用户组名称");
+        groupNameInput.setSingleLine(true);
+        layout.addView(groupNameInput);
+
+        CheckBox adminCheck = new CheckBox(this);
+        adminCheck.setText("这个用户组拥有管理员权限");
+        adminCheck.setTextColor(COLOR_TEXT);
+        layout.addView(adminCheck);
+
+        EditText memberInput = new EditText(this);
+        memberInput.setHint("成员账号 ID");
+        memberInput.setSingleLine(true);
+        layout.addView(memberInput);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("用户组管理")
+                .setView(layout)
+                .setPositiveButton("保存用户组", null)
+                .setNegativeButton("添加成员", null)
+                .setNeutralButton("移除成员", null)
+                .create();
+        dialog.setOnShowListener(view -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button ->
+                    saveGroupFromDialog(groupIdInput, groupNameInput, adminCheck));
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(button ->
+                    updateGroupMemberFromDialog(groupIdInput, memberInput, true));
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(button ->
+                    updateGroupMemberFromDialog(groupIdInput, memberInput, false));
+        });
+        dialog.show();
+    }
+
+    private void saveGroupFromDialog(EditText groupIdInput, EditText groupNameInput, CheckBox adminCheck) {
+        String groupId = groupIdInput.getText().toString().trim();
+        String groupName = groupNameInput.getText().toString().trim();
+        if (groupId.isEmpty()) {
+            groupIdInput.setError("请输入用户组 ID");
+            return;
+        }
+        if (groupName.isEmpty()) {
+            groupNameInput.setError("请输入用户组名称");
+            return;
+        }
+        setStatus("正在保存用户组...");
+        executor.execute(() -> {
+            try {
+                api.saveGroup(groupId, groupName, adminCheck.isChecked());
+                runOnUiThread(() -> setStatus("用户组已保存"));
+            } catch (Exception error) {
+                Log.e(TAG, "Save group failed", error);
+                runOnUiThread(() -> setStatus("保存用户组失败: " + error.getMessage()));
+            }
+        });
+    }
+
+    private void updateGroupMemberFromDialog(EditText groupIdInput, EditText memberInput, boolean add) {
+        String groupId = groupIdInput.getText().toString().trim();
+        String userId = memberInput.getText().toString().trim();
+        if (groupId.isEmpty()) {
+            groupIdInput.setError("请输入用户组 ID");
+            return;
+        }
+        if (userId.isEmpty()) {
+            memberInput.setError("请输入成员账号 ID");
+            return;
+        }
+        setStatus(add ? "正在添加成员..." : "正在移除成员...");
+        executor.execute(() -> {
+            try {
+                api.setGroupMember(groupId, userId, add);
+                runOnUiThread(() -> setStatus(add ? "成员已添加" : "成员已移除"));
+            } catch (Exception error) {
+                Log.e(TAG, "Update group member failed", error);
+                runOnUiThread(() -> setStatus("更新成员失败: " + error.getMessage()));
+            }
+        });
+    }
+
     private void showSettingsDialog() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -615,13 +843,6 @@ public class MainActivity extends Activity {
         userId.setTextColor(COLOR_MUTED);
         userId.setPadding(0, dp(12), 0, 0);
         layout.addView(userId);
-
-        TextView token = new TextView(this);
-        String lastToken = settings.lastToken();
-        token.setText(lastToken.isEmpty() ? "暂无 PushToken" : "Token: " + shortToken(lastToken));
-        token.setTextColor(0xFF4B5563);
-        token.setPadding(0, dp(12), 0, 0);
-        layout.addView(token);
 
         new AlertDialog.Builder(this)
                 .setTitle("设置")
