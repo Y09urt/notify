@@ -1,14 +1,19 @@
 package com.yogurt.notify;
 
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 
 public final class NotificationHelper {
-    public static final String CHANNEL_ID = "notify_messages";
+    public static final String CHANNEL_ID = "notify_messages_alerts";
 
     private NotificationHelper() {
     }
@@ -18,11 +23,22 @@ public final class NotificationHelper {
             return;
         }
 
+        Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "消息通知",
-                NotificationManager.IMPORTANCE_DEFAULT
+                "Notify alerts",
+                NotificationManager.IMPORTANCE_HIGH
         );
+        channel.setDescription("Important Notify message alerts");
+        channel.enableVibration(true);
+        channel.setVibrationPattern(new long[]{0, 300, 180, 300});
+        channel.enableLights(true);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        channel.setSound(soundUri, new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build());
+
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         if (manager != null) {
             manager.createNotificationChannel(channel);
@@ -31,6 +47,12 @@ public final class NotificationHelper {
 
     @SuppressWarnings("deprecation")
     public static void show(Context context, NotifyMessage message) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
         Intent intent = new Intent(context, MainActivity.class);
         intent.putExtra("message_id", message.id);
         intent.putExtra("message_title", message.title);
@@ -43,15 +65,20 @@ public final class NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        android.app.Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? new android.app.Notification.Builder(context, CHANNEL_ID)
-                : new android.app.Notification.Builder(context);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? new Notification.Builder(context, CHANNEL_ID)
+                : new Notification.Builder(context);
 
-        android.app.Notification notification = builder
+        Notification notification = builder
                 .setContentTitle(message.title)
                 .setContentText(message.body)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentIntent(pendingIntent)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setDefaults(Notification.DEFAULT_ALL)
+                .setCategory(Notification.CATEGORY_MESSAGE)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setStyle(new Notification.BigTextStyle().bigText(message.body))
                 .setAutoCancel(true)
                 .build();
 
@@ -61,4 +88,3 @@ public final class NotificationHelper {
         }
     }
 }
-
