@@ -38,6 +38,10 @@ export default {
         return await honorEnvDebug(request, env);
       }
 
+      if (request.method === "GET" && url.pathname === "/debug/push-tokens") {
+        return await pushTokensDebug(request, url, env);
+      }
+
       if (request.method === "GET" && url.pathname === "/app/version") {
         return await appVersion(request, url, env);
       }
@@ -156,6 +160,62 @@ async function honorEnvDebug(request: Request, env: Env): Promise<Response> {
     clientSecretLength: secret.length,
     clientSecretSha256Prefix: digest,
   });
+}
+
+async function pushTokensDebug(request: Request, url: URL, env: Env): Promise<Response> {
+  if (!isAdmin(request, env.ADMIN_TOKEN)) {
+    return json({ error: "missing or invalid admin token" }, 401);
+  }
+
+  const userId = optionalString(url.searchParams.get("userId"));
+  const query = userId
+    ? env.DB.prepare(
+        `SELECT id, user_id, platform, token, device_id, last_error, created_at, updated_at
+         FROM push_tokens
+         WHERE user_id = ?
+         ORDER BY updated_at DESC`,
+      ).bind(normalizeUserId(userId))
+    : env.DB.prepare(
+        `SELECT id, user_id, platform, token, device_id, last_error, created_at, updated_at
+         FROM push_tokens
+         ORDER BY updated_at DESC
+         LIMIT 50`,
+      );
+
+  const result = await query.all<{
+    id: string;
+    user_id: string | null;
+    platform: string;
+    token: string;
+    device_id: string | null;
+    last_error: string | null;
+    created_at: string;
+    updated_at: string;
+  }>();
+
+  return json({
+    ok: true,
+    tokens: await Promise.all(
+      (result.results ?? []).map(async (row) => ({
+        id: row.id,
+        userId: row.user_id,
+        platform: row.platform,
+        tokenLength: row.token.length,
+        tokenSha256Prefix: await sha256Prefix(row.token),
+        deviceId: row.device_id,
+        lastError: row.last_error,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    ),
+  });
+}
+
+async function sha256Prefix(value: string): Promise<string> {
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 12);
 }
 
 async function appVersion(request: Request, url: URL, env: Env): Promise<Response> {
