@@ -11,12 +11,6 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
     env.HONOR_SEND_URL?.trim().replace("{appId}", appId) ??
     `https://push-api.cloud.honor.com/api/v1/${appId}/sendMessage`;
   const messageId = job.messageId ?? crypto.randomUUID();
-  const data = JSON.stringify({
-    ...(job.data ?? {}),
-    id: messageId,
-    title: job.title,
-    body: job.body,
-  });
 
   const response = await fetch(sendUrl, {
     method: "POST",
@@ -26,7 +20,6 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
       timestamp: String(Date.now()),
     },
     body: JSON.stringify({
-      data,
       android: {
         notification: {
           title: job.title,
