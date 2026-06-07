@@ -26,16 +26,11 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
       timestamp: String(Date.now()),
     },
     body: JSON.stringify({
-      notification: {
-        title: job.title,
-        body: job.body,
-      },
       data,
       android: {
         notification: {
           title: job.title,
           body: job.body,
-          channelId: "notify_messages_alerts",
           foregroundShow: true,
           clickAction: {
             type: 3,
