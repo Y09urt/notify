@@ -3,8 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2025-04-01"
 keep_vars = true
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 # Non-sensitive defaults are deployed automatically when Cloudflare builds from GitHub.
+HONOR_APP_ID = "104567925"
 HONOR_TOKEN_URL = "https://iam.developer.hihonor.com/auth/token"
 APP_DEBUG_LATEST_VERSION_CODE = "1"
 APP_DEBUG_LATEST_VERSION_NAME = "1.0-debug"
