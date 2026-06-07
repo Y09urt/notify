@@ -698,6 +698,7 @@ public class MainActivity extends Activity {
         groupManagementItem.setVisibility(settings.isAdmin() ? View.VISIBLE : View.GONE);
         drawerPanel.addView(groupManagementItem);
         drawerPanel.addView(drawerItem("当前账号", COLOR_TEXT, this::showCurrentAccountDialog));
+        drawerPanel.addView(drawerItem("上传诊断日志", COLOR_PRIMARY, this::uploadDiagnostics));
         drawerPanel.addView(drawerItem("设置服务器", COLOR_PRIMARY, this::showSettingsDialog));
         drawerPanel.addView(drawerItem("检查更新", COLOR_PRIMARY, this::checkForUpdates));
         drawerPanel.addView(drawerItem("添加本地测试消息", COLOR_WARNING, this::addLocalTestMessage));
@@ -762,6 +763,16 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> setStatus("读取账号信息失败: " + error.getMessage()));
             }
         });
+    }
+
+    private void uploadDiagnostics() {
+        if (!settings.hasSession()) {
+            showLoginDialog();
+            return;
+        }
+        ClientDiagnostics.record(this, "manual_diagnostics", "info", "Manual diagnostics uploaded", diagnosticDetails());
+        setStatus("诊断日志已上传，正在重新准备消息通道...");
+        prepareMessageChannel();
     }
 
     private void showCurrentAccountResult(WorkerApi.UserInfo user) {
