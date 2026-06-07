@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.hihonor.push.sdk.HonorMessageService;
 import com.hihonor.push.sdk.HonorPushDataMsg;
+import com.yogurt.notify.ClientDiagnostics;
 import com.yogurt.notify.MessageStore;
 import com.yogurt.notify.NotificationHelper;
 import com.yogurt.notify.NotifyMessage;
@@ -18,6 +19,7 @@ public class NotifyHonorPushService extends HonorMessageService {
     @Override
     public void onNewToken(String token) {
         Log.i(TAG, "service onNewToken tokenEmpty=" + (token == null || token.trim().isEmpty()));
+        ClientDiagnostics.record(this, "service_new_token", "tokenEmpty=" + (token == null || token.trim().isEmpty()));
         if (token == null || token.trim().isEmpty()) {
             return;
         }
@@ -27,8 +29,10 @@ public class NotifyHonorPushService extends HonorMessageService {
                 settings.setLastToken(token);
                 new WorkerApi(settings).registerToken(token);
                 Log.i(TAG, "service token uploaded");
+                ClientDiagnostics.record(this, "service_token_uploaded", "Honor push token uploaded from service");
             } catch (Exception ignored) {
                 Log.e(TAG, "service token upload failed", ignored);
+                ClientDiagnostics.record(this, "service_token_upload_failed", "error", ignored.getMessage());
             }
         }).start();
     }
@@ -37,6 +41,7 @@ public class NotifyHonorPushService extends HonorMessageService {
     public void onMessageReceived(HonorPushDataMsg message) {
         Log.i(TAG, "service onMessageReceived");
         String raw = message == null ? null : message.getData();
+        ClientDiagnostics.record(this, "service_message_received", "rawLength=" + (raw == null ? 0 : raw.length()));
         NotifyMessage notifyMessage = parseMessage(raw);
         new MessageStore(this).save(notifyMessage);
         NotificationHelper.show(this, notifyMessage);

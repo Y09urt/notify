@@ -137,6 +137,18 @@ public final class WorkerApi {
         request("POST", "/register", payload.toString());
     }
 
+    public void logClientEvent(String event, String level, String message, JSONObject details) throws Exception {
+        JSONObject payload = new JSONObject();
+        payload.put("event", event);
+        payload.put("level", level == null || level.trim().isEmpty() ? "info" : level);
+        payload.put("message", message == null ? "" : message);
+        payload.put("clientTime", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA).format(new Date()));
+        if (details != null) {
+            payload.put("details", details);
+        }
+        request("POST", "/debug/client-log", payload.toString());
+    }
+
     public void sendMessage(String targetUserId, String groupId, String title, String body) throws Exception {
         JSONObject payload = new JSONObject();
         if (targetUserId != null && !targetUserId.trim().isEmpty()) {

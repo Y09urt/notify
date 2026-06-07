@@ -42,6 +42,10 @@ export default {
         return await pushTokensDebug(request, url, env);
       }
 
+      if (request.method === "POST" && url.pathname === "/debug/client-log") {
+        return await clientLog(request, env);
+      }
+
       if (request.method === "GET" && url.pathname === "/app/version") {
         return await appVersion(request, url, env);
       }
@@ -209,6 +213,68 @@ async function pushTokensDebug(request: Request, url: URL, env: Env): Promise<Re
       })),
     ),
   });
+}
+
+async function clientLog(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  const body = await readJson<{
+    event?: unknown;
+    level?: unknown;
+    message?: unknown;
+    details?: unknown;
+    clientTime?: unknown;
+  }>(request);
+  const event = requiredString(body.event, "event").slice(0, 80);
+  const level = optionalString(body.level)?.slice(0, 20) ?? "info";
+  const message = optionalString(body.message)?.slice(0, 500) ?? "";
+
+  console.log(
+    "client log",
+    JSON.stringify({
+      userId: auth.userId,
+      event,
+      level,
+      message,
+      clientTime: optionalString(body.clientTime)?.slice(0, 80) ?? "",
+      details: sanitizeClientLog(body.details),
+    }),
+  );
+
+  return json({ ok: true });
+}
+
+function sanitizeClientLog(value: unknown, depth = 0): unknown {
+  if (depth > 4) {
+    return "[max-depth]";
+  }
+  if (value == null || typeof value === "boolean" || typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.slice(0, 500);
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((entry) => sanitizeClientLog(entry, depth + 1));
+  }
+  if (typeof value !== "object") {
+    return String(value).slice(0, 500);
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value).slice(0, 30)) {
+    const lower = key.toLowerCase();
+    if (
+      lower.includes("token") ||
+      lower.includes("secret") ||
+      lower.includes("password") ||
+      lower.includes("authorization")
+    ) {
+      sanitized[key] = "[redacted]";
+    } else {
+      sanitized[key] = sanitizeClientLog(child, depth + 1);
+    }
+  }
+  return sanitized;
 }
 
 async function sha256Prefix(value: string): Promise<string> {

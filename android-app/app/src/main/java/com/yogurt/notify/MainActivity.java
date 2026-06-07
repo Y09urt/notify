@@ -3,6 +3,7 @@ package com.yogurt.notify;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.NotificationManager;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -37,6 +38,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final String TAG = "YogurtApp";
@@ -401,17 +404,21 @@ public class MainActivity extends Activity {
             showLoginDialog();
             return;
         }
+        ClientDiagnostics.record(this, "push_prepare_start", "info", "Preparing Honor push channel", diagnosticDetails());
         HonorPushRegistrar.requestToken(this, new HonorPushRegistrar.Callback() {
             @Override
             public void onToken(String token) {
                 Log.i(TAG, "Message channel token received: " + shortToken(token));
+                ClientDiagnostics.record(MainActivity.this, "push_token_received", "Honor push token received");
                 settings.setLastToken(token);
                 executor.execute(() -> {
                     try {
                         api.registerToken(token);
+                        ClientDiagnostics.record(MainActivity.this, "push_token_uploaded", "Honor push token uploaded");
                         runOnUiThread(() -> setStatus("消息通道已就绪"));
                     } catch (Exception error) {
                         Log.e(TAG, "Message channel registration failed", error);
+                        ClientDiagnostics.record(MainActivity.this, "push_token_upload_failed", "error", error.getMessage());
                     }
                 });
             }
@@ -419,15 +426,42 @@ public class MainActivity extends Activity {
             @Override
             public void onError(String message) {
                 Log.e(TAG, "Message channel preparation failed: " + message);
+                ClientDiagnostics.record(MainActivity.this, "push_prepare_failed", "error", message);
                 setStatus("消息通道准备失败: " + message);
             }
 
             @Override
             public void onInfo(String message) {
                 Log.i(TAG, "Message channel info: " + message);
+                ClientDiagnostics.record(MainActivity.this, "push_prepare_info", message);
                 setStatus(message);
             }
         });
+    }
+
+    private JSONObject diagnosticDetails() {
+        JSONObject details = new JSONObject();
+        try {
+            details.put("sdk", Build.VERSION.SDK_INT);
+            details.put("packageName", getPackageName());
+            details.put("workerUrl", settings.workerUrl());
+            details.put("notificationsEnabled", notificationsEnabled());
+            details.put("lastTokenLength", settings.lastToken().length());
+        } catch (Exception ignored) {
+        }
+        return details;
+    }
+
+    private boolean notificationsEnabled() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= 24) {
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            return manager == null || manager.areNotificationsEnabled();
+        }
+        return true;
     }
 
     private void fetchHistory() {
