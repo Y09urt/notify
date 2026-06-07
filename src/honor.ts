@@ -54,12 +54,12 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
   }
 
   const payload = (await response.json().catch(() => ({}))) as {
-    code?: string;
+    code?: string | number;
     message?: string;
     msg?: string;
   };
 
-  if (payload.code && payload.code !== "80000000") {
+  if (payload.code != null && !isHonorSuccessCode(payload.code)) {
     throw new Error(
       `HONOR push request failed: ${payload.code} ${payload.message ?? payload.msg ?? ""}`,
     );
@@ -113,4 +113,9 @@ function envValue(value: string | undefined, name: string): string {
     throw new Error(`${name} is not configured`);
   }
   return text;
+}
+
+function isHonorSuccessCode(code: string | number): boolean {
+  const text = String(code);
+  return text === "200" || text === "80000000" || text === "0";
 }
