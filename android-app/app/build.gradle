@@ -33,6 +33,10 @@ android {
     }
 }
 
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
 dependencies {
     implementation 'com.hihonor.mcs:push:10.0.13.305'
 }

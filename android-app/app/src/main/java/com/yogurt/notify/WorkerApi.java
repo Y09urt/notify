@@ -274,7 +274,8 @@ public final class WorkerApi {
             connection.setRequestMethod(method);
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
-            connection.setRequestProperty("content-type", "application/json");
+            connection.setRequestProperty("content-type", "application/json; charset=UTF-8");
+            connection.setRequestProperty("accept", "application/json; charset=UTF-8");
             if (!sessionToken.isEmpty()) {
                 connection.setRequestProperty("authorization", "Bearer " + sessionToken);
             }

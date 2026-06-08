@@ -35,6 +35,12 @@ export async function sendHonor(env: Env, job: PushJob): Promise<void> {
           bigTitle: job.title,
           bigBody: job.body,
         },
+        data: JSON.stringify({
+          id: job.messageId,
+          title: job.title,
+          body: job.body,
+          data: job.data ?? {},
+        }),
       },
       token: [job.token],
     }),

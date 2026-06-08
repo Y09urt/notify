@@ -6,7 +6,7 @@ const jsonHeaders = {
 };
 
 export function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
+  return new Response(new TextEncoder().encode(JSON.stringify(data)), {
     status,
     headers: jsonHeaders,
   });
@@ -23,7 +23,7 @@ export async function readJson<T>(request: Request): Promise<T> {
   }
 
   try {
-    return (await request.json()) as T;
+    return JSON.parse(await request.text()) as T;
   } catch {
     throw new HttpError(400, "invalid json body");
   }

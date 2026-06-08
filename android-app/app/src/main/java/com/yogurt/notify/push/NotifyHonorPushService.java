@@ -51,6 +51,12 @@ public class NotifyHonorPushService extends HonorMessageService {
             id = data.optString("id", id);
             title = data.optString("title", title);
             body = data.optString("body", body);
+            Object nested = data.opt("data");
+            if (nested instanceof JSONObject) {
+                raw = ((JSONObject) nested).toString();
+            } else if (nested instanceof String && !((String) nested).isEmpty()) {
+                raw = (String) nested;
+            }
         } catch (Exception ignored) {
         }
         return new NotifyMessage(id, title, body, raw, System.currentTimeMillis());
