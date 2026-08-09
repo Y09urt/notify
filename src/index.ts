@@ -221,7 +221,7 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   const body = await readJson<PushRequest>(request);
   const title = requiredString(body.title, "title");
   const messageBody = requiredString(body.body, "body");
-  const data = normalizeData(body.data);
+  const data = await withPushSourceMetadata(request, env, body, title, messageBody);
   const token = optionalString(body.token);
   const userId = optionalString(body.userId);
   const groupId = optionalString(body.groupId);
@@ -269,7 +269,7 @@ async function enqueuePush(request: Request, env: Env): Promise<Response> {
   if (delivery.failed > 0) {
     throw new HttpError(502, `push delivery failed: ${delivery.firstError}`);
   }
-  return json({ ok: true, sent: delivery.sent, failed: delivery.failed }, 202);
+  return json({ ok: true, sent: delivery.sent, failed: delivery.failed, source: data._source }, 202);
 }
 
 async function sendMessage(request: Request, env: Env): Promise<Response> {
@@ -278,7 +278,7 @@ async function sendMessage(request: Request, env: Env): Promise<Response> {
   const body = await readJson<PushRequest>(request);
   const title = requiredString(body.title, "title");
   const messageBody = requiredString(body.body, "body");
-  const data = normalizeData(body.data);
+  const data = withSessionSourceMetadata(request, auth.userId, body.data);
   const targetUserId = optionalString(body.userId);
   const targetGroupId = optionalString(body.groupId);
   const targetGroupName = optionalString(body.groupName);
@@ -476,7 +476,7 @@ async function jobsForUser(
   userId: string,
   title: string,
   messageBody: string,
-  data: Record<string, string> | undefined,
+  data: Record<string, unknown> | undefined,
   messageId: string,
 ): Promise<PushJob[]> {
   const result = await env.DB.prepare(
@@ -501,7 +501,7 @@ async function saveMessage(
   userId: string,
   title: string,
   messageBody: string,
-  data: Record<string, string> | undefined,
+  data: Record<string, unknown> | undefined,
   messageId: string,
 ): Promise<void> {
   await env.DB.prepare(
@@ -590,7 +590,129 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function normalizeData(value: unknown): Record<string, string> | undefined {
+async function withPushSourceMetadata(
+  request: Request,
+  env: Env,
+  body: PushRequest,
+  title: string,
+  messageBody: string,
+): Promise<Record<string, unknown>> {
+  const data = normalizeData(body.data) ?? {};
+  const source = await pushSourceMetadata(request, env, body, title, messageBody);
+  return {
+    ...data,
+    _source: data._source ?? source,
+  };
+}
+
+async function pushSourceMetadata(
+  request: Request,
+  env: Env,
+  body: PushRequest,
+  title: string,
+  messageBody: string,
+): Promise<Record<string, unknown>> {
+  const requestId = crypto.randomUUID();
+  const sentAt = new Date().toISOString();
+  const ip = clientIp(request);
+  const sender = senderName(request, body);
+  const authType = request.headers.get("authorization")?.startsWith("Bearer ")
+    ? "authorization"
+    : request.headers.get("x-admin-token")
+      ? "x-admin-token"
+      : "unknown";
+  const target = {
+    userId: optionalString(body.userId),
+    groupId: optionalString(body.groupId),
+    groupName: optionalString(body.groupName),
+    token: optionalString(body.token) ? "direct-token" : undefined,
+  };
+  const canonical = JSON.stringify({
+    requestId,
+    sentAt,
+    ip,
+    sender,
+    authType,
+    target,
+    title,
+    body: messageBody,
+  });
+
+  return {
+    requestId,
+    sentAt,
+    sender,
+    channel: "push",
+    ip,
+    country: request.cf?.country,
+    userAgent: request.headers.get("user-agent") ?? "",
+    authType,
+    signature: await hmacSha256Hex(env.ADMIN_TOKEN, canonical),
+  };
+}
+
+function withSessionSourceMetadata(
+  request: Request,
+  sender: string,
+  value: unknown,
+): Record<string, unknown> {
+  const data = normalizeData(value) ?? {};
+  return {
+    ...data,
+    _source: data._source ?? {
+      requestId: crypto.randomUUID(),
+      sentAt: new Date().toISOString(),
+      sender,
+      channel: "app",
+      ip: clientIp(request),
+      country: request.cf?.country,
+      userAgent: request.headers.get("user-agent") ?? "",
+      authType: "session",
+    },
+  };
+}
+
+function senderName(request: Request, body: PushRequest): string {
+  return (
+    optionalString(body.sender) ??
+    headerString(request, "x-notify-sender") ??
+    headerString(request, "x-sender") ??
+    "external"
+  ).slice(0, 80);
+}
+
+function headerString(request: Request, name: string): string | undefined {
+  return optionalString(request.headers.get(name));
+}
+
+function clientIp(request: Request): string {
+  const cfIp = request.headers.get("cf-connecting-ip");
+  if (cfIp) {
+    return cfIp;
+  }
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",", 1)[0].trim();
+  }
+  return request.headers.get("x-real-ip") ?? "";
+}
+
+async function hmacSha256Hex(secret: string, value: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)));
+}
+
+function hex(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeData(value: unknown): Record<string, unknown> | undefined {
   if (value == null) {
     return undefined;
   }
@@ -599,12 +721,7 @@ function normalizeData(value: unknown): Record<string, string> | undefined {
     throw new HttpError(400, "data must be an object");
   }
 
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-      key,
-      typeof entry === "string" ? entry : JSON.stringify(entry),
-    ]),
-  );
+  return value as Record<string, unknown>;
 }
 
 function safeJson(value: string): unknown {

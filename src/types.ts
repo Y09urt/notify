@@ -29,7 +29,7 @@ export interface PushJob {
   token: string;
   title: string;
   body: string;
-  data?: Record<string, string>;
+  data?: Record<string, unknown>;
 }
 
 export interface RegisterRequest {
@@ -45,6 +45,7 @@ export interface PushRequest {
   groupId?: unknown;
   groupName?: unknown;
   platform?: unknown;
+  sender?: unknown;
   title?: unknown;
   body?: unknown;
   data?: unknown;

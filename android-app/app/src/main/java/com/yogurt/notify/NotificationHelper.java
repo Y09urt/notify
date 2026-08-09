@@ -68,17 +68,18 @@ public final class NotificationHelper {
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new Notification.Builder(context, CHANNEL_ID)
                 : new Notification.Builder(context);
+        String displayBody = MessageFormatter.plainText(message.body);
 
         Notification notification = builder
                 .setContentTitle(message.title)
-                .setContentText(message.body)
+                .setContentText(displayBody)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentIntent(pendingIntent)
                 .setPriority(Notification.PRIORITY_HIGH)
                 .setDefaults(Notification.DEFAULT_ALL)
                 .setCategory(Notification.CATEGORY_MESSAGE)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .setStyle(new Notification.BigTextStyle().bigText(message.body))
+                .setStyle(new Notification.BigTextStyle().bigText(displayBody))
                 .setAutoCancel(true)
                 .build();
 

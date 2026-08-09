@@ -14,6 +14,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.net.Uri;
 import android.text.InputType;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -39,6 +40,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
     private static final String TAG = "YogurtApp";
@@ -584,13 +587,26 @@ public class MainActivity extends Activity {
             card.addView(itemTitle);
 
             TextView itemBody = new TextView(this);
-            itemBody.setText(message.body);
+            itemBody.setText(MessageFormatter.format(message.body));
             itemBody.setTextSize(14);
             itemBody.setTextColor(COLOR_MUTED);
             itemBody.setMaxLines(2);
             itemBody.setEllipsize(TextUtils.TruncateAt.END);
             itemBody.setPadding(0, dp(6), 0, dp(8));
             card.addView(itemBody);
+
+            String sender = sourceField(message.data, "sender");
+            if (!sender.isEmpty()) {
+                TextView itemSender = new TextView(this);
+                itemSender.setText("From: " + sender);
+                itemSender.setTextSize(12);
+                itemSender.setTypeface(Typeface.DEFAULT_BOLD);
+                itemSender.setTextColor(COLOR_PRIMARY);
+                itemSender.setSingleLine(true);
+                itemSender.setEllipsize(TextUtils.TruncateAt.END);
+                itemSender.setPadding(0, 0, 0, dp(6));
+                card.addView(itemSender);
+            }
 
             TextView itemTime = new TextView(this);
             itemTime.setText(format.format(new Date(message.createdAt)));
@@ -818,9 +834,13 @@ public class MainActivity extends Activity {
     }
 
     private void showMessageDialog(NotifyMessage message) {
-        String text = message.body;
+        SpannableStringBuilder text = new SpannableStringBuilder(MessageFormatter.format(message.body));
+        CharSequence source = sourceMetadataText(message.data);
+        if (source.length() > 0) {
+            text.append("\n\nSource:\n").append(source);
+        }
         if (message.data != null && !"null".equals(message.data)) {
-            text += "\n\nData:\n" + message.data;
+            text.append("\n\nData:\n").append(message.data);
         }
         new AlertDialog.Builder(this)
                 .setTitle(message.title)
@@ -831,6 +851,76 @@ public class MainActivity extends Activity {
                     refreshLocal();
                 })
                 .show();
+    }
+
+    private CharSequence sourceMetadataText(String rawData) {
+        if (rawData == null || rawData.trim().isEmpty() || "null".equals(rawData)) {
+            return "";
+        }
+
+        try {
+            JSONObject source = sourceObject(rawData);
+            if (source == null) {
+                return "";
+            }
+
+            StringBuilder text = new StringBuilder();
+            appendSourceLine(text, "Sender", source.optString("sender"));
+            appendSourceLine(text, "Channel", source.optString("channel"));
+            appendSourceLine(text, "IP", source.optString("ip"));
+            appendSourceLine(text, "Time", source.optString("sentAt"));
+            appendSourceLine(text, "Country", source.optString("country"));
+            appendSourceLine(text, "Auth", source.optString("authType"));
+            appendSourceLine(text, "Request ID", source.optString("requestId"));
+            appendSourceLine(text, "Signature", shortValue(source.optString("signature"), 32));
+            appendSourceLine(text, "User-Agent", shortValue(source.optString("userAgent"), 96));
+            return text.toString().trim();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String sourceField(String rawData, String key) {
+        try {
+            JSONObject source = sourceObject(rawData);
+            return source == null ? "" : source.optString(key).trim();
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private JSONObject sourceObject(String rawData) throws Exception {
+        if (rawData == null || rawData.trim().isEmpty() || "null".equals(rawData)) {
+            return null;
+        }
+
+        JSONObject data = new JSONObject(rawData);
+        Object sourceValue = data.opt("_source");
+        if (sourceValue instanceof JSONObject) {
+            return (JSONObject) sourceValue;
+        }
+        if (sourceValue instanceof String && !((String) sourceValue).isEmpty()) {
+            return new JSONObject((String) sourceValue);
+        }
+        return null;
+    }
+
+    private void appendSourceLine(StringBuilder text, String label, String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return;
+        }
+        text.append("- ").append(label).append(": ").append(value.trim()).append("\n");
+    }
+
+    private String shortValue(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String text = value.trim();
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + "...";
     }
 
     private void showSendMessageDialog() {
